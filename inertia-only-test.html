@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#02060d">
+<title>Чёрное стекло — чистый тест плоского рывка</title>
+<style>
+  :root { color-scheme: dark; --ink:#e9f5ff; --muted:rgba(205,225,246,.56); --line:rgba(173,218,255,.16); --panel:rgba(5,12,22,.76); }
+  * { box-sizing:border-box; }
+  html,body { margin:0; width:100%; height:100%; overflow:hidden; background:#02060d; }
+  body { font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; -webkit-font-smoothing:antialiased; overscroll-behavior:none; user-select:none; }
+  canvas { position:fixed; inset:0; width:100%; height:100%; display:block; pointer-events:none; }
+  .hud { position:fixed; z-index:2; top:max(22px,env(safe-area-inset-top)); left:clamp(20px,5vw,56px); max-width:min(430px,calc(100vw - 40px)); pointer-events:none; }
+  .eyebrow { margin:0 0 8px; color:rgba(168,207,242,.62); font-size:10px; font-weight:760; letter-spacing:.20em; line-height:1.2; }
+  h1 { margin:0; color:var(--ink); font-size:clamp(22px,5.5vw,30px); letter-spacing:.018em; line-height:1.08; }
+  .hint { margin:10px 0 0; color:var(--muted); font-size:13px; line-height:1.5; }
+  .status { margin-top:13px; display:inline-flex; align-items:center; gap:7px; max-width:100%; min-height:27px; padding:5px 10px 5px 8px; border:1px solid rgba(172,218,255,.13); border-radius:999px; color:rgba(215,236,255,.66); background:rgba(3,9,17,.44); font-size:10px; letter-spacing:.045em; }
+  .pulse { flex:0 0 auto; width:5px; height:5px; border-radius:50%; background:rgba(118,212,255,.8); box-shadow:0 0 11px rgba(87,193,255,.75); }
+  .panel { position:fixed; z-index:3; left:50%; bottom:max(21px,env(safe-area-inset-bottom)); transform:translateX(-50%); display:flex; align-items:center; justify-content:center; gap:7px; width:max-content; max-width:calc(100vw - 32px); padding:6px; border:1px solid var(--line); border-radius:17px; background:var(--panel); box-shadow:0 14px 44px rgba(0,0,0,.32); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); }
+  button { appearance:none; min-height:37px; padding:0 12px; border:1px solid transparent; border-radius:11px; background:transparent; color:rgba(218,237,255,.75); font:650 12px/1 Inter,ui-sans-serif,system-ui,sans-serif; letter-spacing:.012em; cursor:pointer; }
+  button.primary { color:rgba(239,250,255,.97); background:rgba(61,164,250,.17); border-color:rgba(131,211,255,.27); }
+  button:active { transform:translateY(1px) scale(.985); }
+  button:disabled { opacity:.35; cursor:default; }
+  .divider { width:1px; height:21px; background:rgba(186,224,255,.14); }
+  .note { position:fixed; z-index:2; right:clamp(20px,5vw,56px); bottom:max(31px,env(safe-area-inset-bottom)); margin:0; max-width:270px; color:rgba(188,215,244,.37); text-align:right; font-size:10px; line-height:1.42; pointer-events:none; }
+  .warning { position:fixed; z-index:4; left:50%; top:50%; transform:translate(-50%,-50%); width:min(360px,calc(100vw - 36px)); padding:18px; border:1px solid rgba(184,224,255,.16); border-radius:20px; background:rgba(6,13,24,.88); box-shadow:0 20px 60px rgba(0,0,0,.4); color:rgba(222,240,255,.78); font-size:13px; line-height:1.5; }
+  .warning[hidden] { display:none; }
+  .warning strong { display:block; margin-bottom:6px; color:#edf8ff; font-size:15px; }
+  .warning button { margin-top:13px; width:100%; }
+  @media (max-width:620px) { .hud { top:max(20px,env(safe-area-inset-top)); left:20px; } .hint { max-width:325px; } .note { display:none; } .panel { bottom:max(15px,env(safe-area-inset-bottom)); } button { min-height:35px; padding:0 10px; font-size:11px; } }
+</style>
+</head>
+<body>
+<canvas id="field" aria-label="Чистый тест линейной инерции телефона"></canvas>
+<header class="hud">
+  <p class="eyebrow">ЧЁРНОЕ СТЕКЛО · ЛАБОРАТОРИЯ РЫВКА · V0.7</p>
+  <h1>Шар и рывок</h1>
+  <p class="hint">Здесь намеренно отключены наклон и закрутка. После нулевой точки резко сдвинь телефон в плоскости экрана и сразу останови. Если датчик видит импульс, шар должен уйти в противоположную сторону.</p>
+  <div class="status" aria-live="polite"><i class="pulse"></i><span id="status">нажми «Включить датчики»</span></div>
+</header>
+<div class="panel" aria-label="Управление экспериментом">
+  <button id="enable" class="primary" type="button">Включить датчики</button>
+  <i class="divider" aria-hidden="true"></i>
+  <button id="zero" type="button" disabled>Выставить ноль</button>
+  <button id="reset" type="button">Сбросить шар</button>
+</div>
+<p class="note">Это не игровое управление и не новая механика. В этой изолированной пробе наклон и поворот намеренно ничего не делают: мы проверяем только линейный импульс акселерометра.</p>
+<div class="warning" id="warning" hidden role="dialog" aria-live="assertive">
+  <strong id="warning-title">Нужен доступ к движению</strong>
+  <span id="warning-copy">Открой страницу в Safari или Chrome телефона и разреши доступ к датчикам движения.</span>
+  <button id="warning-close" class="primary" type="button">Понятно</button>
+</div>
+<script>
+(() => {
+  'use strict';
+  const canvas=document.getElementById('field');
+  const ctx=canvas.getContext('2d',{alpha:false});
+  const hud=document.querySelector('.hud');
+  const enableButton=document.getElementById('enable');
+  const zeroButton=document.getElementById('zero');
+  const resetButton=document.getElementById('reset');
+  const statusNode=document.getElementById('status');
+  const warning=document.getElementById('warning');
+  const warningTitle=document.getElementById('warning-title');
+  const warningCopy=document.getElementById('warning-copy');
+  const warningClose=document.getElementById('warning-close');
+  const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+  const magnitude=(x,y)=>Math.hypot(x,y);
+  const state={
+    dpr:1,width:0,height:0,board:{x:0,y:0,w:0,h:0,r:32},grain:null,
+    enabled:false,sensorSeen:false,listenerAttached:false,
+    accel:{ready:false,source:'',previousX:0,previousY:0,stillSince:0,cooldownUntil:0,announcedAt:0},
+    ball:{u:.5,v:.52,vu:0,vv:0,r:.046}
+  };
+  function setStatus(text){statusNode.textContent=text;}
+  function showWarning(title,copy){warningTitle.textContent=title;warningCopy.textContent=copy;warning.hidden=false;}
+  function closeWarning(){warning.hidden=true;}
+  function roundedRect(c,x,y,w,h,r){const q=Math.min(r,w/2,h/2);c.beginPath();c.moveTo(x+q,y);c.arcTo(x+w,y,x+w,y+h,q);c.arcTo(x+w,y+h,x,y+h,q);c.arcTo(x,y+h,x,y,q);c.arcTo(x,y,x+q,y,q);c.closePath();}
+  function buildGrain(){const grain=document.createElement('canvas');grain.width=156;grain.height=218;const g=grain.getContext('2d');const img=g.createImageData(grain.width,grain.height);for(let i=0;i<img.data.length;i+=4){const cold=102+Math.random()*68;img.data[i]=cold;img.data[i+1]=cold+7;img.data[i+2]=cold+22;img.data[i+3]=Math.random()*22;}g.putImageData(img,0,0);state.grain=grain;}
+  function resize(){state.dpr=Math.min(window.devicePixelRatio||1,2);state.width=innerWidth;state.height=innerHeight;canvas.width=Math.floor(state.width*state.dpr);canvas.height=Math.floor(state.height*state.dpr);ctx.setTransform(state.dpr,0,0,state.dpr,0,0);const hudBottom=hud.getBoundingClientRect().bottom;const topRoom=Math.min(Math.max(226,hudBottom+28),state.height*.38);const bottomRoom=Math.min(108,state.height*.16);const available=Math.max(290,state.height-topRoom-bottomRoom);const maxW=Math.min(state.width*.79,590);const h=Math.min(available,maxW*1.15);const w=Math.min(maxW,h/1.15);state.board={x:(state.width-w)/2,y:topRoom+(available-h)/2,w,h:w*1.15,r:Math.max(27,Math.min(40,w*.072))};buildGrain();}
+  function boardPoint(u,v){const b=state.board;return{x:b.x+b.w*u,y:b.y+b.h*v};}
+  function screenAngle(){const a=screen.orientation&&Number.isFinite(screen.orientation.angle)?screen.orientation.angle:(Number.isFinite(window.orientation)?window.orientation:0);return((a%360)+360)%360;}
+  function motionAxesToScreen(x,y){const a=screenAngle();if(a===90)return{x:-y,y:x};if(a===180)return{x:-x,y:-y};if(a===270)return{x:y,y:-x};return{x,y};}
+  function resetZero(){const a=state.accel;a.ready=false;a.source='';a.previousX=0;a.previousY=0;a.stillSince=0;a.cooldownUntil=0;setStatus('держи телефон спокойно — снимаю нулевую точку рывка');}
+  function resetBall(){state.ball.u=.5;state.ball.v=.52;state.ball.vu=0;state.ball.vv=0;setStatus(state.accel.ready?'шар снова в центре — можно делать рывок':'шар снова в центре');}
+  function rawAcceleration(event){const d=event.acceleration;if(d&&Number.isFinite(d.x)&&Number.isFinite(d.y))return{x:d.x,y:d.y,source:'direct'};const g=event.accelerationIncludingGravity;if(g&&Number.isFinite(g.x)&&Number.isFinite(g.y))return{x:g.x,y:g.y,source:'gravity'};return null;}
+  function directionText(u,v){if(Math.abs(u)>=Math.abs(v))return u<0?'шар ушёл влево':'шар ушёл вправо';return v<0?'шар ушёл вверх':'шар ушёл вниз';}
+  function handleMotion(event){if(!state.enabled)return;const raw=rawAcceleration(event);if(!raw)return;state.sensorSeen=true;const now=performance.now();const a=state.accel;
+    if(a.source!==raw.source){a.source=raw.source;a.previousX=raw.x;a.previousY=raw.y;a.stillSince=now;a.ready=false;setStatus('держи телефон спокойно — снимаю нулевую точку рывка');return;}
+    const dx=raw.x-a.previousX,dy=raw.y-a.previousY;a.previousX=raw.x;a.previousY=raw.y;const change=magnitude(dx,dy);
+    if(!a.ready){if(change>.72)a.stillSince=now;if(now-a.stillSince>=620){a.ready=true;setStatus('ноль готов — резко сдвинь телефон в плоскости экрана');}return;}
+    const mapped=motionAxesToScreen(dx,dy);const strength=magnitude(mapped.x,mapped.y);const threshold=raw.source==='direct'?.45:.75;
+    if(strength<=threshold||now<a.cooldownUntil)return;
+    // В чистом опыте намеренно делаем отклик щедрым: задача — сначала увидеть сам канал,
+    // а не воспроизвести будущую игровую настройку один к одному.
+    const usable=(strength-threshold)/strength;const scale=raw.source==='direct'?.17:.13;
+    const impulseU=clamp(-mapped.x*usable*scale,-.38,.38);const impulseV=clamp(mapped.y*usable*scale,-.38,.38);const size=magnitude(impulseU,impulseV);if(size<.006)return;
+    state.ball.vu=clamp(state.ball.vu+impulseU,-1.55,1.55);state.ball.vv=clamp(state.ball.vv+impulseV,-1.55,1.55);a.cooldownUntil=now+125;
+    if(now-a.announcedAt>350){setStatus(`рывок считан — ${directionText(impulseU,impulseV)}`);a.announcedAt=now;}
+  }
+  async function requestPortraitLock(){try{if(screen.orientation&&typeof screen.orientation.lock==='function')await screen.orientation.lock('portrait-primary');}catch(_){}}
+  async function enableSensors(){closeWarning();try{let motion='granted';let orientation='granted';if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function')motion=await DeviceMotionEvent.requestPermission();if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function')orientation=await DeviceOrientationEvent.requestPermission();if(motion!=='granted'||orientation!=='granted'){showWarning('Движение не разрешено','Разреши доступ к движению в настройках браузера, затем открой страницу снова.');setStatus('датчики не разрешены');return;}if(typeof DeviceMotionEvent==='undefined'){showWarning('На этом устройстве нет датчиков','Для этого теста нужен телефон с датчиками движения.');return;}await requestPortraitLock();state.enabled=true;state.sensorSeen=false;resetZero();if(!state.listenerAttached){window.addEventListener('devicemotion',handleMotion,true);state.listenerAttached=true;}enableButton.textContent='Датчики включены';enableButton.disabled=true;zeroButton.disabled=false;setTimeout(()=>{if(state.enabled&&!state.sensorSeen){showWarning('Датчики пока молчат','Открой страницу напрямую в Safari или Chrome, не во встроенном просмотре мессенджера.');setStatus('не вижу сигнал датчиков');}},2800);}catch(_){showWarning('Не удалось включить движение','Открой страницу напрямую в Safari или Chrome и попробуй ещё раз.');setStatus('датчики недоступны');}}
+  function drawBackdrop(){const bg=ctx.createLinearGradient(0,0,state.width,state.height);bg.addColorStop(0,'#02060d');bg.addColorStop(.55,'#050b16');bg.addColorStop(1,'#080819');ctx.fillStyle=bg;ctx.fillRect(0,0,state.width,state.height);const glow=ctx.createRadialGradient(state.width*.5,state.height*.42,0,state.width*.5,state.height*.45,Math.max(state.width,state.height)*.68);glow.addColorStop(0,'rgba(54,113,181,.10)');glow.addColorStop(.53,'rgba(26,49,91,.028)');glow.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=glow;ctx.fillRect(0,0,state.width,state.height);}
+  function drawMarble(){const ball=state.ball,p=boardPoint(ball.u,ball.v),r=Math.max(12,state.board.w*ball.r);ctx.save();ctx.filter='blur(4px)';const sh=ctx.createRadialGradient(p.x+r*.16,p.y+r*.72,0,p.x+r*.16,p.y+r*.72,r*1.45);sh.addColorStop(0,'rgba(0,0,0,.7)');sh.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=sh;ctx.beginPath();ctx.ellipse(p.x+r*.16,p.y+r*.7,r*1.35,r*.42,.05,0,Math.PI*2);ctx.fill();ctx.restore();ctx.save();ctx.globalCompositeOperation='screen';const halo=ctx.createRadialGradient(p.x,p.y,r*.16,p.x,p.y,r*2.8);halo.addColorStop(0,'rgba(191,239,255,.29)');halo.addColorStop(.38,'rgba(80,184,255,.14)');halo.addColorStop(1,'rgba(65,103,225,0)');ctx.fillStyle=halo;ctx.beginPath();ctx.arc(p.x,p.y,r*2.8,0,Math.PI*2);ctx.fill();ctx.restore();const marble=ctx.createRadialGradient(p.x-r*.33,p.y-r*.42,r*.06,p.x,p.y,r);marble.addColorStop(0,'rgba(249,254,255,.99)');marble.addColorStop(.16,'rgba(178,233,255,.98)');marble.addColorStop(.49,'rgba(52,136,220,.96)');marble.addColorStop(.78,'rgba(12,41,91,.99)');marble.addColorStop(1,'rgba(2,12,35,1)');ctx.save();ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fillStyle=marble;ctx.fill();ctx.strokeStyle='rgba(244,254,255,.95)';ctx.lineWidth=1.35;ctx.stroke();ctx.globalCompositeOperation='screen';ctx.strokeStyle='rgba(162,232,255,.78)';ctx.lineWidth=.9;ctx.beginPath();ctx.arc(p.x-r*.05,p.y-r*.04,r*.82,3.52,5.38);ctx.stroke();ctx.restore();}
+  function render(){drawBackdrop();const b=state.board;ctx.save();ctx.shadowColor='rgba(0,0,0,.86)';ctx.shadowBlur=54;ctx.shadowOffsetY=22;roundedRect(ctx,b.x,b.y,b.w,b.h,b.r);ctx.fillStyle='#02060d';ctx.fill();ctx.restore();ctx.save();roundedRect(ctx,b.x,b.y,b.w,b.h,b.r);ctx.clip();const glass=ctx.createLinearGradient(b.x,b.y,b.x+b.w,b.y+b.h);glass.addColorStop(0,'#12233a');glass.addColorStop(.24,'#071222');glass.addColorStop(.55,'#02070f');glass.addColorStop(1,'#0c0b1d');ctx.fillStyle=glass;ctx.fillRect(b.x,b.y,b.w,b.h);const top=ctx.createRadialGradient(b.x+b.w*.25,b.y+b.h*.02,0,b.x+b.w*.28,b.y+b.h*.03,b.w*.88);top.addColorStop(0,'rgba(148,205,255,.18)');top.addColorStop(.4,'rgba(70,135,210,.045)');top.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=top;ctx.fillRect(b.x,b.y,b.w,b.h);ctx.globalAlpha=.13;ctx.globalCompositeOperation='screen';ctx.drawImage(state.grain,b.x,b.y,b.w,b.h);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';drawMarble();ctx.restore();ctx.save();roundedRect(ctx,b.x,b.y,b.w,b.h,b.r);ctx.strokeStyle='rgba(224,241,255,.21)';ctx.lineWidth=1;ctx.stroke();roundedRect(ctx,b.x+1.2,b.y+1.2,b.w-2.4,b.h-2.4,b.r-1.2);ctx.strokeStyle='rgba(255,255,255,.07)';ctx.lineWidth=.8;ctx.stroke();ctx.restore();}
+  let last=performance.now();function frame(now){const dt=Math.min(.045,(now-last)/1000);last=now;const b=state.ball;b.vu*=Math.exp(-.88*dt);b.vv*=Math.exp(-.88*dt);b.u+=b.vu*dt;b.v+=b.vv*dt;if(b.u<.04||b.u>.96){b.vu*=-.42;b.u=clamp(b.u,.04,.96);}if(b.v<.04||b.v>.96){b.vv*=-.42;b.v=clamp(b.v,.04,.96);}render();requestAnimationFrame(frame);}
+  enableButton.addEventListener('click',enableSensors);zeroButton.addEventListener('click',resetZero);resetButton.addEventListener('click',resetBall);warningClose.addEventListener('click',closeWarning);window.addEventListener('resize',resize,{passive:true});resize();requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
