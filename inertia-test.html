@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#02060d">
+<title>Чёрное стекло — инерция от рывка</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --ink: #e9f5ff;
+    --muted: rgba(205, 225, 246, .56);
+    --line: rgba(173, 218, 255, .16);
+    --panel: rgba(5, 12, 22, .76);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #02060d; }
+  body {
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+    user-select: none;
+  }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+  .hud {
+    position: fixed; z-index: 2; top: max(22px, env(safe-area-inset-top)); left: clamp(20px, 5vw, 56px);
+    max-width: min(430px, calc(100vw - 40px)); pointer-events: none;
+  }
+  .eyebrow { margin: 0 0 8px; color: rgba(168, 207, 242, .62); font-size: 10px; font-weight: 760; letter-spacing: .20em; line-height: 1.2; }
+  h1 { margin: 0; color: var(--ink); font-size: clamp(22px, 5.5vw, 30px); letter-spacing: .018em; line-height: 1.08; }
+  .hint { margin: 10px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+  .status {
+    margin-top: 13px; display: inline-flex; align-items: center; gap: 7px; max-width: 100%; min-height: 27px;
+    padding: 5px 10px 5px 8px; border: 1px solid rgba(172, 218, 255, .13); border-radius: 999px;
+    color: rgba(215, 236, 255, .66); background: rgba(3, 9, 17, .44); font-size: 10px; letter-spacing: .045em;
+  }
+  .pulse { flex: 0 0 auto; width: 5px; height: 5px; border-radius: 50%; background: rgba(118, 212, 255, .8); box-shadow: 0 0 11px rgba(87, 193, 255, .75); }
+  .pivot-control {
+    display: inline-flex; align-items: center; gap: 4px; margin-top: 10px; padding: 4px;
+    border: 1px solid rgba(172, 218, 255, .13); border-radius: 12px; background: rgba(3, 9, 17, .38);
+    color: rgba(196, 221, 246, .55); font-size: 9px; letter-spacing: .075em; pointer-events: auto;
+  }
+  .pivot-label { padding: 0 3px 0 4px; white-space: nowrap; }
+  button.pivot-choice {
+    min-height: 26px; padding: 0 8px; border-color: transparent; border-radius: 8px;
+    color: rgba(195, 220, 242, .62); font-size: 10px; font-weight: 670;
+  }
+  button.pivot-choice[aria-pressed="true"] {
+    color: rgba(240, 251, 255, .96); border-color: rgba(126, 210, 255, .25); background: rgba(62, 163, 248, .16);
+  }
+  .jerk-control {
+    display: inline-flex; align-items: center; gap: 4px; margin-top: 7px; padding: 4px;
+    border: 1px solid rgba(172, 218, 255, .13); border-radius: 12px; background: rgba(3, 9, 17, .38);
+    color: rgba(196, 221, 246, .55); font-size: 9px; letter-spacing: .075em; pointer-events: auto;
+  }
+  .jerk-label { padding: 0 3px 0 4px; white-space: nowrap; }
+  button.jerk-choice {
+    min-height: 26px; padding: 0 8px; border-color: transparent; border-radius: 8px;
+    color: rgba(195, 220, 242, .62); font-size: 10px; font-weight: 670;
+  }
+  button.jerk-choice[aria-pressed="true"] {
+    color: rgba(240, 251, 255, .96); border-color: rgba(126, 210, 255, .25); background: rgba(62, 163, 248, .16);
+  }
+  .panel {
+    position: fixed; z-index: 3; left: 50%; bottom: max(21px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+    display: flex; align-items: center; justify-content: center; gap: 7px; width: max-content; max-width: calc(100vw - 32px);
+    padding: 6px; border: 1px solid var(--line); border-radius: 17px; background: var(--panel);
+    box-shadow: 0 14px 44px rgba(0,0,0,.32); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  }
+  button {
+    appearance: none; min-height: 37px; padding: 0 12px; border: 1px solid transparent; border-radius: 11px;
+    background: transparent; color: rgba(218, 237, 255, .75); font: 650 12px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: .012em; cursor: pointer;
+  }
+  button.primary { color: rgba(239,250,255,.97); background: rgba(61, 164, 250, .17); border-color: rgba(131, 211, 255, .27); }
+  button:active { transform: translateY(1px) scale(.985); }
+  button:disabled { opacity: .35; cursor: default; }
+  .divider { width: 1px; height: 21px; background: rgba(186,224,255,.14); }
+  .note {
+    position: fixed; z-index: 2; right: clamp(20px, 5vw, 56px); bottom: max(31px, env(safe-area-inset-bottom));
+    margin: 0; max-width: 270px; color: rgba(188, 215, 244, .37); text-align: right; font-size: 10px; line-height: 1.42; pointer-events: none;
+  }
+  .warning {
+    position: fixed; z-index: 4; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100vw - 36px));
+    padding: 18px; border: 1px solid rgba(184, 224, 255, .16); border-radius: 20px; background: rgba(6, 13, 24, .88);
+    box-shadow: 0 20px 60px rgba(0,0,0,.4); color: rgba(222, 240, 255, .78); font-size: 13px; line-height: 1.5;
+  }
+  .warning[hidden] { display: none; }
+  .warning strong { display: block; margin-bottom: 6px; color: #edf8ff; font-size: 15px; }
+  .warning button { margin-top: 13px; width: 100%; }
+  @media (max-width: 620px) {
+    .hud { top: max(20px, env(safe-area-inset-top)); left: 20px; }
+    .hint { max-width: 325px; }
+    .note { display: none; }
+    .panel { bottom: max(15px, env(safe-area-inset-bottom)); }
+    button { min-height: 35px; padding: 0 10px; font-size: 11px; }
+    button.pivot-choice, button.jerk-choice { min-height: 26px; padding: 0 8px; font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+  <canvas id="field" aria-label="Тест управления телефоном: наклоняйте и поворачивайте устройство"></canvas>
+
+  <header class="hud">
+    <p class="eyebrow">ЧЁРНОЕ СТЕКЛО · ТЕСТ ИНЕРЦИИ · V0.6</p>
+    <h1>Шар в руках</h1>
+    <p class="hint">Это отдельная проба. Включи «инерцию», резко сдвинь телефон в плоскости экрана и останови: шар должен кратко остаться «в мире». Наклон и закрутка сохранены.</p>
+    <div class="status" aria-live="polite"><i class="pulse"></i><span id="status">нажми «Включить движение»</span></div>
+    <div class="pivot-control" role="group" aria-label="Выбор хвата телефона">
+      <span class="pivot-label">хват</span>
+      <button id="pivot-left" class="pivot-choice" type="button" aria-label="Левша: опора в нижнем левом углу" aria-pressed="false">левша</button>
+      <button id="pivot-right" class="pivot-choice" type="button" aria-label="Правша: опора в нижнем правом углу" aria-pressed="true">правша</button>
+    </div>
+    <div class="jerk-control" role="group" aria-label="Экспериментальная инерция от плоского рывка">
+      <span class="jerk-label">рывок</span>
+      <button id="jerk-off" class="jerk-choice" type="button" aria-pressed="true">выкл</button>
+      <button id="jerk-on" class="jerk-choice" type="button" aria-pressed="false">инерция</button>
+    </div>
+  </header>
+
+  <div class="panel" aria-label="Управление датчиками">
+    <button id="enable" class="primary" type="button">Включить движение</button>
+    <i class="divider" aria-hidden="true"></i>
+    <button id="calibrate" type="button" disabled>Выставить чашу</button>
+    <button id="reset" type="button">Сбросить шар</button>
+  </div>
+
+  <p class="note">В тесте нет управления пальцем по полю: палец нужен только для кнопок. Перед стартом включи системную блокировку поворота экрана. Если датчики не запускаются, открой страницу напрямую в Safari или Chrome, а не во встроенном просмотре мессенджера.</p>
+
+  <div class="warning" id="warning" hidden role="dialog" aria-live="assertive">
+    <strong id="warning-title">Нужен доступ к движению</strong>
+    <span id="warning-copy">Открой страницу в браузере телефона и разреши доступ к датчикам движения.</span>
+    <button id="warning-close" class="primary" type="button">Понятно</button>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  const canvas = document.getElementById('field');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const hud = document.querySelector('.hud');
+  const enableButton = document.getElementById('enable');
+  const calibrateButton = document.getElementById('calibrate');
+  const resetButton = document.getElementById('reset');
+  const pivotLeftButton = document.getElementById('pivot-left');
+  const pivotRightButton = document.getElementById('pivot-right');
+  const jerkOffButton = document.getElementById('jerk-off');
+  const jerkOnButton = document.getElementById('jerk-on');
+  const statusNode = document.getElementById('status');
+  const warning = document.getElementById('warning');
+  const warningTitle = document.getElementById('warning-title');
+  const warningCopy = document.getElementById('warning-copy');
+  const warningClose = document.getElementById('warning-close');
+
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const magnitude = (x, y) => Math.hypot(x, y);
+  const mix = (a, b, t) => a + (b - a) * t;
+
+  const state = {
+    dpr: 1,
+    width: 0,
+    height: 0,
+    board: { x: 0, y: 0, w: 0, h: 0, r: 32 },
+    time: 0,
+    enabled: false,
+    sensorSeen: false,
+    calibration: null,
+    // x/y — наклон чаши в градусах относительно калибровки. impulse — короткая инерция от резкой смены наклона.
+    tilt: { targetX: 0, targetY: 0, x: 0, y: 0, impulseX: 0, impulseY: 0, lastSampleAt: 0 },
+    portrait: { tried: false, locked: false },
+    // omega — скорость самой чаши; pivot — нижняя точка хвата, вокруг которой пользователь реально крутит телефон.
+    // yaw нужен как запасной канал, если телефон не отдаёт rotationRate.alpha.
+    spin: { pivot: 'right', omega: 0, phase: 0, lastAppliedAt: 0, lastMotionRateAt: 0, lastYaw: null, lastYawAt: 0, filteredRate: 0, announcedAt: 0 },
+    // Отдельный, опциональный канал: линейное ускорение телефона в плоскости экрана.
+    // По умолчанию выключен, чтобы не менять принятую v0.5.
+    jerk: { enabled: false, energy: 0, lastAppliedAt: 0, fallbackX: 0, fallbackY: 0, fallbackAt: 0, fallbackReady: false, announcedAt: 0 },
+    ball: { u: .615, v: .605, vu: 0, vv: 0, r: .046 },
+    lastOrientationAt: 0,
+    lastToastAt: 0,
+    grain: null
+  };
+
+  function setStatus(text) {
+    statusNode.textContent = text;
+  }
+
+  function showWarning(title, copy) {
+    warningTitle.textContent = title;
+    warningCopy.textContent = copy;
+    warning.hidden = false;
+  }
+
+  function closeWarning() { warning.hidden = true; }
+
+  function roundedRect(context, x, y, w, h, r) {
+    const radius = Math.min(r, w / 2, h / 2);
+    context.beginPath();
+    context.moveTo(x + radius, y);
+    context.arcTo(x + w, y, x + w, y + h, radius);
+    context.arcTo(x + w, y + h, x, y + h, radius);
+    context.arcTo(x, y + h, x, y, radius);
+    context.arcTo(x, y, x + radius, y, radius);
+    context.closePath();
+  }
+
+  function buildGrain() {
+    const grain = document.createElement('canvas');
+    grain.width = 156; grain.height = 218;
+    const grainCtx = grain.getContext('2d');
+    const image = grainCtx.createImageData(grain.width, grain.height);
+    for (let i = 0; i < image.data.length; i += 4) {
+      const cold = 102 + Math.random() * 68;
+      image.data[i] = cold;
+      image.data[i + 1] = cold + 7;
+      image.data[i + 2] = cold + 22;
+      image.data[i + 3] = Math.random() * 22;
+    }
+    grainCtx.putImageData(image, 0, 0);
+    state.grain = grain;
+  }
+
+  function resize() {
+    state.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    state.width = window.innerWidth;
+    state.height = window.innerHeight;
+    canvas.width = Math.floor(state.width * state.dpr);
+    canvas.height = Math.floor(state.height * state.dpr);
+    ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+    // Шапка растёт на телефоне из-за выбора точки хвата; поле не должно заезжать под неё.
+    const hudBottom = hud ? hud.getBoundingClientRect().bottom : 198;
+    const topRoom = Math.min(Math.max(226, hudBottom + 28), state.height * .38);
+    const bottomRoom = Math.min(108, state.height * .16);
+    const availableH = Math.max(290, state.height - topRoom - bottomRoom);
+    const maxW = Math.min(state.width * .79, 590);
+    const h = Math.min(availableH, maxW * 1.15);
+    const w = Math.min(maxW, h / 1.15);
+    state.board = {
+      x: (state.width - w) / 2,
+      y: topRoom + (availableH - h) / 2,
+      w,
+      h: w * 1.15,
+      r: Math.max(27, Math.min(40, w * .072))
+    };
+    buildGrain();
+  }
+
+  function spinPivot() {
+    // Ось реального поворота проходит через нижний угол, которым ладонь опирает телефон.
+    return state.spin.pivot === 'left' ? { u: .095, v: .91 } : { u: .905, v: .91 };
+  }
+
+  function gripLabel() {
+    return state.spin.pivot === 'left' ? 'левши' : 'правши';
+  }
+
+  function setSpinPivot(side) {
+    if (side !== 'left' && side !== 'right') return;
+    state.spin.pivot = side;
+    // При смене хвата не переносим остаточную закрутку через всё поле.
+    state.spin.omega = 0;
+    state.spin.filteredRate = 0;
+    state.spin.lastAppliedAt = 0;
+    state.spin.phase = 0;
+    pivotLeftButton.setAttribute('aria-pressed', String(side === 'left'));
+    pivotRightButton.setAttribute('aria-pressed', String(side === 'right'));
+    setStatus(`выбран хват ${gripLabel()}`);
+  }
+
+  function resetJerkFilter() {
+    const jerk = state.jerk;
+    jerk.energy = 0;
+    jerk.lastAppliedAt = 0;
+    jerk.fallbackX = 0;
+    jerk.fallbackY = 0;
+    jerk.fallbackAt = 0;
+    jerk.fallbackReady = false;
+  }
+
+  function setJerkEnabled(enabled) {
+    state.jerk.enabled = Boolean(enabled);
+    resetJerkFilter();
+    jerkOffButton.setAttribute('aria-pressed', String(!enabled));
+    jerkOnButton.setAttribute('aria-pressed', String(enabled));
+    setStatus(enabled
+      ? 'инерция от рывка включена — резко сдвинь телефон в плоскости экрана'
+      : 'инерция от рывка выключена');
+  }
+
+  function resetBall() {
+    state.ball.u = .615;
+    state.ball.v = .605;
+    state.ball.vu = 0;
+    state.ball.vv = 0;
+    state.tilt.impulseX = 0;
+    state.tilt.impulseY = 0;
+    state.spin.omega = 0;
+    state.spin.filteredRate = 0;
+    state.spin.lastAppliedAt = 0;
+    state.jerk.energy = 0;
+    setStatus(state.enabled ? 'шар снова ждёт движения' : 'нажми «Включить движение»');
+  }
+
+  function screenAngle() {
+    const angle = screen.orientation && Number.isFinite(screen.orientation.angle)
+      ? screen.orientation.angle
+      : (Number.isFinite(window.orientation) ? window.orientation : 0);
+    return ((angle % 360) + 360) % 360;
+  }
+
+  function angleDifference(current, origin) {
+    let difference = current - origin;
+    while (difference > 180) difference -= 360;
+    while (difference < -180) difference += 360;
+    return difference;
+  }
+
+  function motionAxesToScreen(x, y) {
+    // x/y из DeviceMotion — оси железа. Приводим их к экрану, сохраняя портрет как основной случай.
+    const angle = screenAngle();
+    if (angle === 90) return { x: -y, y: x };
+    if (angle === 180) return { x: -x, y: -y };
+    if (angle === 270) return { x: y, y: -x };
+    return { x, y };
+  }
+
+  function orientationToTilt(beta, gamma) {
+    const calibration = state.calibration;
+    if (!calibration) return { x: 0, y: 0 };
+    const pitch = angleDifference(beta, calibration.beta);
+    const roll = angleDifference(gamma, calibration.gamma);
+    const angle = screenAngle();
+    let x = roll;
+    let y = pitch;
+    if (angle === 90) { x = -pitch; y = roll; }
+    else if (angle === 180) { x = -roll; y = -pitch; }
+    else if (angle === 270) { x = pitch; y = -roll; }
+    // Сохраняем реальный угол, а не нормализуем его до ±1: сила тяжести должна зависеть от наклона.
+    return { x: clamp(x, -38, 38), y: clamp(y, -38, 38) };
+  }
+
+  function addTiltImpulse(tilt) {
+    const now = performance.now();
+    const previousAt = state.tilt.lastSampleAt;
+    if (previousAt) {
+      const elapsed = clamp((now - previousAt) / 1000, .008, .12);
+      const rateX = (tilt.x - state.tilt.targetX) / elapsed;
+      const rateY = (tilt.y - state.tilt.targetY) / elapsed;
+      // Медленный наклон работает только через «гравитацию». Резкая смена наклона добавляет
+      // заметный, но короткий толчок: это инерция шара, а не постоянный мотор.
+      const kick = (rate) => {
+        const excess = Math.max(0, Math.abs(rate) - 52);
+        return Math.sign(rate) * Math.min(.90, excess / 175);
+      };
+      state.tilt.impulseX = clamp(state.tilt.impulseX + kick(rateX), -1.10, 1.10);
+      state.tilt.impulseY = clamp(state.tilt.impulseY + kick(rateY), -1.10, 1.10);
+    }
+    state.tilt.targetX = tilt.x;
+    state.tilt.targetY = tilt.y;
+    state.tilt.lastSampleAt = now;
+  }
+
+  function slopeForce(degrees) {
+    const usableAngle = Math.max(0, Math.abs(degrees) - 1.10);
+    if (!usableAngle) return 0;
+    const angle = Math.min(usableAngle, 38);
+    // Резкий наклон должен выигрывать у слабого не только визуально: усиливаем физический sin угла
+    // к верхней части диапазона, но оставляем мягкую мёртвую зону для спокойной руки.
+    const gravity = Math.sin(angle * Math.PI / 180);
+    const sharpTiltGain = 1 + .45 * (angle / 38);
+    return Math.sign(degrees) * gravity * sharpTiltGain * 4.0;
+  }
+
+  async function requestPortraitLock() {
+    state.portrait.tried = true;
+    const orientation = screen.orientation;
+    if (!orientation || typeof orientation.lock !== 'function') return false;
+    try {
+      await orientation.lock('portrait-primary');
+      state.portrait.locked = true;
+      return true;
+    } catch (_) {
+      // Safari не позволяет странице принудительно включить системную блокировку. Это нормально:
+      // пользователь видит подсказку и включает её в Пункте управления/быстрых настройках.
+      return false;
+    }
+  }
+
+  function handleOrientation(event) {
+    if (!state.enabled || !Number.isFinite(event.beta) || !Number.isFinite(event.gamma)) return;
+    if (!state.calibration) {
+      state.calibration = { beta: event.beta, gamma: event.gamma };
+      setStatus('ровное положение запомнено — сильный наклон катит заметно быстрее');
+    }
+    addTiltImpulse(orientationToTilt(event.beta, event.gamma));
+    trackYawSpin(event);
+    state.sensorSeen = true;
+    state.lastOrientationAt = performance.now();
+  }
+
+  function applySpinRate(rate, now) {
+    if (!Number.isFinite(rate)) return;
+    const spin = state.spin;
+    const elapsed = spin.lastAppliedAt ? clamp((now - spin.lastAppliedAt) / 1000, .008, .09) : .016;
+    spin.lastAppliedAt = now;
+    // Один умеренный прокрут кисти должен быть заметен: прежняя формула реагировала лишь на очень резкие >72°/с.
+    spin.filteredRate = mix(spin.filteredRate, rate, .46);
+    const filtered = spin.filteredRate;
+    const absRate = Math.abs(filtered);
+    if (absRate < 11) return;
+
+    const direction = Math.sign(filtered);
+    const targetMagnitude = clamp(.42 + (absRate - 11) / 42 * 2.82, .42, 3.25);
+    const target = direction * targetMagnitude;
+    const follow = 1 - Math.exp(-elapsed * (7 + Math.min(9, absRate / 9)));
+    spin.omega += (target - spin.omega) * follow;
+    // У по-настоящему быстрого прокрута есть отчётливый, но ограниченный стартовый толчок.
+    if (absRate > 110) spin.omega = clamp(spin.omega + direction * .18, -3.25, 3.25);
+
+    if (now - spin.announcedAt > 550) {
+      setStatus('физический поворот считан');
+      spin.announcedAt = now;
+    }
+  }
+
+  function trackYawSpin(event) {
+    // На части iPhone rotationRate.alpha приходит пустым. Тогда берём производную alpha из DeviceOrientation.
+    if (!Number.isFinite(event.alpha)) return;
+    const now = performance.now();
+    const spin = state.spin;
+    const previousYaw = spin.lastYaw;
+    const previousAt = spin.lastYawAt;
+    spin.lastYaw = event.alpha;
+    spin.lastYawAt = now;
+    if (!Number.isFinite(previousYaw) || !previousAt || now - spin.lastMotionRateAt < 170) return;
+    const elapsed = clamp((now - previousAt) / 1000, .008, .12);
+    const yawRate = angleDifference(event.alpha, previousYaw) / elapsed;
+    if (Math.abs(yawRate) > 3) applySpinRate(yawRate, now);
+  }
+
+  function readPlanarAcceleration(event, now) {
+    const direct = event.acceleration;
+    if (direct && Number.isFinite(direct.x) && Number.isFinite(direct.y)) {
+      // Предпочтительный канал: из него ОС уже вычла гравитацию.
+      return { x: direct.x, y: direct.y, source: 'linear' };
+    }
+
+    const withGravity = event.accelerationIncludingGravity;
+    if (!withGravity || !Number.isFinite(withGravity.x) || !Number.isFinite(withGravity.y)) return null;
+    const jerk = state.jerk;
+    if (!jerk.fallbackReady) {
+      jerk.fallbackX = withGravity.x;
+      jerk.fallbackY = withGravity.y;
+      jerk.fallbackAt = now;
+      jerk.fallbackReady = true;
+      return { x: 0, y: 0, source: 'filtered-gravity' };
+    }
+    const elapsed = jerk.fallbackAt ? clamp((now - jerk.fallbackAt) / 1000, .008, .12) : .016;
+    jerk.fallbackAt = now;
+    // Запасной канал: медленно убираем постоянную гравитацию, оставляя только короткий толчок.
+    const follow = 1 - Math.exp(-elapsed * 3.0);
+    jerk.fallbackX += (withGravity.x - jerk.fallbackX) * follow;
+    jerk.fallbackY += (withGravity.y - jerk.fallbackY) * follow;
+    return { x: withGravity.x - jerk.fallbackX, y: withGravity.y - jerk.fallbackY, source: 'filtered-gravity' };
+  }
+
+  function applyPlanarJerk(event, now) {
+    const sample = readPlanarAcceleration(event, now);
+    if (!sample) return false;
+    if (!state.jerk.enabled) return true;
+
+    const axes = motionAxesToScreen(sample.x, sample.y);
+    const strength = magnitude(axes.x, axes.y);
+    // Невысокая дрожь руки не двигает шар; для резервного канала порог выше, потому что он шумнее.
+    const threshold = sample.source === 'linear' ? 1.65 : 2.45;
+    const jerk = state.jerk;
+    const elapsed = jerk.lastAppliedAt ? clamp((now - jerk.lastAppliedAt) / 1000, .008, .08) : .016;
+    jerk.lastAppliedAt = now;
+    if (strength <= threshold) return true;
+
+    const aboveThreshold = (strength - threshold) / strength;
+    const gain = sample.source === 'linear' ? .92 : .58;
+    // В системе координат телефона шар сопротивляется ускорению корпуса: телефон вправо — шар влево.
+    const impulseU = clamp(-axes.x * aboveThreshold * gain * elapsed, -.20, .20);
+    // Ось y датчика направлена к верхнему краю телефона, а v поля — к нижнему.
+    const impulseV = clamp(axes.y * aboveThreshold * gain * elapsed, -.20, .20);
+    const impulseSize = magnitude(impulseU, impulseV);
+    if (impulseSize < .003) return true;
+
+    const ball = state.ball;
+    ball.vu = clamp(ball.vu + impulseU, -1.70, 1.70);
+    ball.vv = clamp(ball.vv + impulseV, -1.70, 1.70);
+    // На долю секунды поднимаем допустимую скорость: сильный рывок может честно долететь до стенки.
+    jerk.energy = clamp(jerk.energy + impulseSize * 5.0, 0, 1.30);
+    if (now - jerk.announcedAt > 600) {
+      setStatus('плоский рывок считан');
+      jerk.announcedAt = now;
+    }
+    return true;
+  }
+
+  function handleMotion(event) {
+    if (!state.enabled) return;
+    const now = performance.now();
+    let sawMotion = false;
+
+    // alpha — поворот вокруг оси, перпендикулярной экрану: именно «провернуть чашу».
+    const rate = event.rotationRate && event.rotationRate.alpha;
+    if (Number.isFinite(rate)) {
+      sawMotion = true;
+      if (Math.abs(rate) > 1.5) {
+        state.spin.lastMotionRateAt = now;
+        applySpinRate(rate, now);
+      }
+    }
+
+    const hasPlanarData = (event.acceleration && Number.isFinite(event.acceleration.x) && Number.isFinite(event.acceleration.y))
+      || (event.accelerationIncludingGravity && Number.isFinite(event.accelerationIncludingGravity.x) && Number.isFinite(event.accelerationIncludingGravity.y));
+    if (hasPlanarData) {
+      sawMotion = true;
+      if (state.jerk.enabled) applyPlanarJerk(event, now);
+    }
+    if (sawMotion) state.sensorSeen = true;
+  }
+
+  async function enableSensors() {
+    closeWarning();
+    // Запрос в том же пользовательском жесте: Chrome может удержать портрет, Safari корректно откажется.
+    const portraitLockAttempt = requestPortraitLock();
+    try {
+      let motionPermission = 'granted';
+      let orientationPermission = 'granted';
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        motionPermission = await DeviceMotionEvent.requestPermission();
+      }
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        orientationPermission = await DeviceOrientationEvent.requestPermission();
+      }
+      if (motionPermission !== 'granted' || orientationPermission !== 'granted') {
+        showWarning('Движение не разрешено', 'Разреши доступ к движению в настройках браузера, затем открой страницу снова.');
+        setStatus('датчики не разрешены');
+        return;
+      }
+      if (typeof DeviceOrientationEvent === 'undefined' && typeof DeviceMotionEvent === 'undefined') {
+        showWarning('На этом устройстве нет датчиков', 'Для этого теста нужен телефон с датчиками движения.');
+        return;
+      }
+      const portraitLocked = await portraitLockAttempt;
+      state.enabled = true;
+      state.calibration = null;
+      state.tilt.targetX = state.tilt.targetY = state.tilt.x = state.tilt.y = 0;
+      state.tilt.impulseX = state.tilt.impulseY = 0;
+      state.tilt.lastSampleAt = 0;
+      state.spin.lastAppliedAt = 0;
+      state.spin.lastMotionRateAt = 0;
+      state.spin.lastYaw = null;
+      state.spin.lastYawAt = 0;
+      state.spin.filteredRate = 0;
+      resetJerkFilter();
+      window.addEventListener('deviceorientation', handleOrientation, true);
+      window.addEventListener('devicemotion', handleMotion, true);
+      enableButton.textContent = 'Движение включено';
+      enableButton.disabled = true;
+      calibrateButton.disabled = false;
+      setStatus(portraitLocked
+        ? 'держи телефон спокойно — запоминаю ровное положение'
+        : 'зафиксируй экран в портрете и держи телефон спокойно');
+      window.setTimeout(() => {
+        if (state.enabled && !state.sensorSeen) {
+          showWarning('Датчики пока молчат', 'Открой эту страницу напрямую в Safari или Chrome. Встроенный просмотр мессенджера часто блокирует датчики.');
+          setStatus('не вижу сигнал датчиков');
+        }
+      }, 2800);
+    } catch (error) {
+      showWarning('Не удалось включить движение', 'Открой страницу напрямую в Safari или Chrome и попробуй ещё раз.');
+      setStatus('датчики недоступны');
+    }
+  }
+
+  function calibrate() {
+    state.calibration = null;
+    state.tilt.targetX = state.tilt.targetY = state.tilt.x = state.tilt.y = 0;
+    state.tilt.impulseX = state.tilt.impulseY = 0;
+    state.tilt.lastSampleAt = 0;
+    resetJerkFilter();
+    setStatus('держи телефон так, как хочешь считать его ровным');
+  }
+
+  function boardPoint(u, v) {
+    const b = state.board;
+    return { x: b.x + b.w * u, y: b.y + b.h * v };
+  }
+
+  function drawBackdrop() {
+    const bg = ctx.createLinearGradient(0, 0, state.width, state.height);
+    bg.addColorStop(0, '#02060d'); bg.addColorStop(.55, '#050b16'); bg.addColorStop(1, '#080819');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, state.width, state.height);
+    const glow = ctx.createRadialGradient(state.width * .5, state.height * .42, 0, state.width * .5, state.height * .45, Math.max(state.width, state.height) * .68);
+    glow.addColorStop(0, 'rgba(54, 113, 181, .10)'); glow.addColorStop(.53, 'rgba(26, 49, 91, .028)'); glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow; ctx.fillRect(0, 0, state.width, state.height);
+  }
+
+  function drawMarble() {
+    const ball = state.ball;
+    const p = boardPoint(ball.u, ball.v);
+    const radius = Math.max(12, state.board.w * ball.r);
+    ctx.save();
+    ctx.filter = 'blur(4px)';
+    const shadow = ctx.createRadialGradient(p.x + radius * .16, p.y + radius * .72, 0, p.x + radius * .16, p.y + radius * .72, radius * 1.45);
+    shadow.addColorStop(0, 'rgba(0,0,0,.7)'); shadow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = shadow; ctx.beginPath(); ctx.ellipse(p.x + radius*.16, p.y + radius*.7, radius*1.35, radius*.42, .05, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+    ctx.save(); ctx.globalCompositeOperation = 'screen';
+    const halo = ctx.createRadialGradient(p.x, p.y, radius*.16, p.x, p.y, radius*2.8);
+    halo.addColorStop(0, 'rgba(191,239,255,.29)'); halo.addColorStop(.38, 'rgba(80,184,255,.14)'); halo.addColorStop(1, 'rgba(65,103,225,0)');
+    ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(p.x,p.y,radius*2.8,0,Math.PI*2);ctx.fill();ctx.restore();
+    const marble = ctx.createRadialGradient(p.x-radius*.33,p.y-radius*.42,radius*.06,p.x,p.y,radius);
+    marble.addColorStop(0,'rgba(249,254,255,.99)'); marble.addColorStop(.16,'rgba(178,233,255,.98)'); marble.addColorStop(.49,'rgba(52,136,220,.96)'); marble.addColorStop(.78,'rgba(12,41,91,.99)');marble.addColorStop(1,'rgba(2,12,35,1)');
+    ctx.save();ctx.beginPath();ctx.arc(p.x,p.y,radius,0,Math.PI*2);ctx.fillStyle=marble;ctx.fill();ctx.strokeStyle='rgba(244,254,255,.95)';ctx.lineWidth=1.35;ctx.stroke();ctx.globalCompositeOperation='screen';ctx.strokeStyle='rgba(162,232,255,.78)';ctx.lineWidth=.9;ctx.beginPath();ctx.arc(p.x-radius*.05,p.y-radius*.04,radius*.82,3.52,5.38);ctx.stroke();ctx.restore();
+  }
+
+  function render() {
+    drawBackdrop();
+    const b = state.board;
+    ctx.save(); ctx.shadowColor='rgba(0,0,0,.86)';ctx.shadowBlur=54;ctx.shadowOffsetY=22;roundedRect(ctx,b.x,b.y,b.w,b.h,b.r);ctx.fillStyle='#02060d';ctx.fill();ctx.restore();
+    ctx.save();roundedRect(ctx,b.x,b.y,b.w,b.h,b.r);ctx.clip();
+    const glass=ctx.createLinearGradient(b.x,b.y,b.x+b.w,b.y+b.h);glass.addColorStop(0,'#12233a');glass.addColorStop(.24,'#071222');glass.addColorStop(.55,'#02070f');glass.addColorStop(1,'#0c0b1d');ctx.fillStyle=glass;ctx.fillRect(b.x,b.y,b.w,b.h);
+    const top=ctx.createRadialGradient(b.x+b.w*.25,b.y+b.h*.02,0,b.x+b.w*.28,b.y+b.h*.03,b.w*.88);top.addColorStop(0,'rgba(148,205,255,.18)');top.addColorStop(.4,'rgba(70,135,210,.045)');top.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=top;ctx.fillRect(b.x,b.y,b.w,b.h);
+    ctx.globalAlpha=.13;ctx.globalCompositeOperation='screen';ctx.drawImage(state.grain,b.x,b.y,b.w,b.h);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+    // Поле оставлено тихим: рельеф в будущей игре должен быть единственным рисунком под шаром.
+    drawMarble();ctx.restore();
+    ctx.save();roundedRect(ctx,b.x,b.y,b.w,b.h,b.r);ctx.strokeStyle='rgba(224,241,255,.21)';ctx.lineWidth=1;ctx.stroke();roundedRect(ctx,b.x+1.2,b.y+1.2,b.w-2.4,b.h-2.4,b.r-1.2);ctx.strokeStyle='rgba(255,255,255,.07)';ctx.lineWidth=.8;ctx.stroke();ctx.restore();
+  }
+
+  function update(dt) {
+    // Следует за рукой быстрее прежнего, но сохраняет фильтр от цифровой дрожи датчика.
+    const tiltSmooth = 1 - Math.exp(-dt * 15.0);
+    state.tilt.x += (state.tilt.targetX - state.tilt.x) * tiltSmooth;
+    state.tilt.y += (state.tilt.targetY - state.tilt.y) * tiltSmooth;
+    // Толчок живёт чуть дольше: резкий наклон ощущается как настоящий разгон, а не как вспышка.
+    const impulseDecay = Math.exp(-5.0 * dt);
+    state.tilt.impulseX *= impulseDecay;
+    state.tilt.impulseY *= impulseDecay;
+    state.spin.omega *= Math.exp(-1.14 * dt);
+    if (Math.abs(state.spin.omega) < .012) state.spin.omega = 0;
+    state.spin.phase += state.spin.omega * dt;
+    state.jerk.energy *= Math.exp(-4.1 * dt);
+    if (state.jerk.energy < .006) state.jerk.energy = 0;
+
+    const ball = state.ball;
+    const bowlU = ball.u - .5;
+    const bowlV = ball.v - .52;
+    const slopeX = slopeForce(state.tilt.x);
+    const slopeY = slopeForce(state.tilt.y);
+    // Наклон задаёт «тяжесть», а резкая смена наклона — короткий добавочный импульс.
+    // Чаша стала чуть мельче: шар не вязнет у центра и естественнее отвечает на руку.
+    let au = slopeX + state.tilt.impulseX - bowlU * 1.17;
+    let av = slopeY + state.tilt.impulseY - bowlV * 1.17;
+    if (state.spin.omega) {
+      const pivot = spinPivot();
+      const fromPivotU = ball.u - pivot.u;
+      const fromPivotV = ball.v - pivot.v;
+      const radius = Math.hypot(fromPivotU, fromPivotV);
+      if (radius > .001) {
+        const outwardU = fromPivotU / radius;
+        const outwardV = fromPivotV / radius;
+        const tangentU = -outwardV;
+        const tangentV = outwardU;
+        // Центробежная сила теперь расходится от реальной нижней точки хвата, а не от центра экрана.
+        const centrifugal = state.spin.omega * state.spin.omega * .26 * Math.min(.90, .14 + radius * 1.08);
+        const swirl = state.spin.omega * .13 * Math.min(1, .38 + radius * 1.7);
+        au += outwardU * centrifugal + tangentU * swirl;
+        av += outwardV * centrifugal + tangentV * swirl;
+      }
+    }
+    ball.vu += au * dt; ball.vv += av * dt;
+    // Потолок растёт с наклоном, резким толчком, закруткой и — только в этом опыте — плоским рывком.
+    const slopeStrength = Math.max(Math.abs(slopeX), Math.abs(slopeY));
+    const impulseStrength = magnitude(state.tilt.impulseX, state.tilt.impulseY);
+    const spinStrength = Math.abs(state.spin.omega);
+    const jerkStrength = state.jerk.energy;
+    const maxSpeed = clamp(.44 + slopeStrength * .47 + impulseStrength * .52 + spinStrength * .18 + jerkStrength * .95, .44, 1.65);
+    const speed = magnitude(ball.vu, ball.vv);
+    if (speed > maxSpeed) { ball.vu = ball.vu / speed * maxSpeed; ball.vv = ball.vv / speed * maxSpeed; }
+    // Вместо тяжёлой «жидкой» вязкости — слабое сопротивление качению по стеклу.
+    const drag = Math.exp(-.76 * dt);
+    ball.vu *= drag; ball.vv *= drag; ball.u += ball.vu * dt; ball.v += ball.vv * dt;
+    if(ball.u<.04||ball.u>.96){ball.vu*=-.38;ball.u=clamp(ball.u,.04,.96);}
+    if(ball.v<.04||ball.v>.96){ball.vv*=-.38;ball.v=clamp(ball.v,.04,.96);}
+  }
+
+  let lastFrame=performance.now();
+  function frame(now){const dt=Math.min(.045,(now-lastFrame)/1000);lastFrame=now;state.time+=dt;update(dt);render();requestAnimationFrame(frame);}
+
+  enableButton.addEventListener('click', enableSensors);
+  calibrateButton.addEventListener('click', calibrate);
+  resetButton.addEventListener('click', resetBall);
+  pivotLeftButton.addEventListener('click', () => setSpinPivot('left'));
+  pivotRightButton.addEventListener('click', () => setSpinPivot('right'));
+  jerkOffButton.addEventListener('click', () => setJerkEnabled(false));
+  jerkOnButton.addEventListener('click', () => setJerkEnabled(true));
+  warningClose.addEventListener('click', closeWarning);
+  window.addEventListener('resize', resize, { passive: true });
+  resize(); requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
