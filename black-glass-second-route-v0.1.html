@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#02060d">
+<title>Чёрное стекло — второй маршрут</title>
+<style>
+  :root { color-scheme:dark; --ink:#e9f4ff; --muted:rgba(205,224,244,.56); --line:rgba(177,215,251,.17); --panel:rgba(7,13,24,.76); }
+  * { box-sizing:border-box; }
+  html,body { width:100%;height:100%;margin:0;overflow:hidden;background:#02050a; }
+  body { font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; -webkit-font-smoothing:antialiased; overscroll-behavior:none; user-select:none; }
+  canvas { position:fixed;inset:0;width:100%;height:100%;display:block;pointer-events:none; }
+  .hud { position:fixed;z-index:2;top:max(22px,env(safe-area-inset-top));left:clamp(20px,5vw,56px);max-width:min(430px,calc(100vw - 40px));pointer-events:none; }
+  .eyebrow { margin:0 0 8px;color:rgba(171,205,238,.62);font-size:10px;font-weight:760;letter-spacing:.20em;line-height:1.2; }
+  h1 { margin:0;color:var(--ink);font-size:clamp(22px,5.5vw,30px);letter-spacing:.018em;line-height:1.08; }
+  .hint { margin:10px 0 0;color:var(--muted);font-size:13px;line-height:1.48; }
+  .status { margin-top:13px;display:inline-flex;align-items:center;gap:7px;max-width:100%;min-height:27px;padding:5px 10px 5px 8px;border:1px solid rgba(172,214,255,.13);border-radius:999px;background:rgba(5,10,18,.42);color:rgba(206,231,255,.62);font-size:10px;letter-spacing:.045em; }
+  .pulse { flex:0 0 auto;width:5px;height:5px;border-radius:50%;background:rgba(133,211,255,.8);box-shadow:0 0 10px rgba(88,193,255,.7); }
+  .switch { display:inline-flex;align-items:center;gap:4px;margin-top:10px;padding:4px;border:1px solid rgba(172,218,255,.13);border-radius:12px;background:rgba(3,9,17,.38);color:rgba(196,221,246,.55);font-size:9px;letter-spacing:.075em;pointer-events:auto; }
+  .switch[hidden] { display:none; }
+  .switch-label { padding:0 3px 0 4px;white-space:nowrap; }
+  button.switch-choice { min-height:26px;padding:0 8px;border-color:transparent;border-radius:8px;color:rgba(195,220,242,.62);font-size:10px;font-weight:670; }
+  button.switch-choice[aria-pressed="true"] { color:rgba(240,251,255,.97);border-color:rgba(126,210,255,.25);background:rgba(62,163,248,.16); }
+  .panel { position:fixed;z-index:3;left:50%;bottom:max(21px,env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;justify-content:center;gap:7px;width:max-content;max-width:calc(100vw - 32px);padding:6px;border:1px solid var(--line);border-radius:17px;background:var(--panel);box-shadow:0 14px 44px rgba(0,0,0,.32);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px); }
+  button { appearance:none;min-height:37px;padding:0 12px;border:1px solid transparent;border-radius:11px;background:transparent;color:rgba(218,236,255,.76);font:650 12px/1 Inter,ui-sans-serif,system-ui,sans-serif;letter-spacing:.012em;cursor:pointer; }
+  button.primary { color:rgba(239,250,255,.98);background:rgba(61,164,250,.17);border-color:rgba(131,211,255,.27); }
+  button:active { transform:translateY(1px) scale(.985); }
+  button:disabled { opacity:.35;cursor:default; }
+  .divider { width:1px;height:21px;background:rgba(186,224,255,.14); }
+  .note { position:fixed;z-index:2;right:clamp(20px,5vw,56px);bottom:max(31px,env(safe-area-inset-bottom));margin:0;max-width:270px;color:rgba(188,215,244,.37);text-align:right;font-size:10px;line-height:1.42;pointer-events:none; }
+  .warning { position:fixed;z-index:12;left:50%;top:50%;transform:translate(-50%,-50%);width:min(360px,calc(100vw - 36px));padding:18px;border:1px solid rgba(184,224,255,.16);border-radius:20px;background:rgba(6,13,24,.9);box-shadow:0 20px 60px rgba(0,0,0,.4);color:rgba(222,240,255,.78);font-size:13px;line-height:1.5; }
+  .warning[hidden] { display:none; }
+  .warning strong { display:block;margin-bottom:6px;color:#edf8ff;font-size:15px; }
+  .warning button { margin-top:13px;width:100%; }
+  @media (max-width:620px) { .hud { top:max(20px,env(safe-area-inset-top));left:20px; }.hint{max-width:326px}.note{display:none}.panel{bottom:max(15px,env(safe-area-inset-bottom))}button{min-height:35px;padding:0 10px;font-size:11px}button.switch-choice{min-height:26px;padding:0 8px;font-size:10px} }
+
+
+  /* ===== Второй маршрут: островный обход ===== */
+  .screen { position:fixed;z-index:8;inset:0;display:grid;place-items:center;padding:22px;transition:opacity .28s ease,visibility .28s ease; }
+  .screen.hidden { opacity:0;visibility:hidden;pointer-events:none; }
+  .intro-card,.win-card { width:min(390px,calc(100vw - 42px));padding:25px 22px 21px;border:1px solid rgba(179,221,255,.18);border-radius:25px;background:linear-gradient(145deg,rgba(12,23,40,.94),rgba(5,11,21,.94));box-shadow:0 28px 78px rgba(0,0,0,.52),inset 0 1px 0 rgba(255,255,255,.05);text-align:center;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px); }
+  .orb-mark { width:58px;height:58px;margin:0 auto 15px;border-radius:50%;background:radial-gradient(circle at 34% 25%,#fff 0 4%,#b9ecff 10%,#377ec3 38%,#0c234d 70%,#010512 100%);box-shadow:0 0 0 1px rgba(230,250,255,.68),0 0 32px rgba(97,193,255,.30),inset -8px -9px 18px rgba(0,0,0,.44); }
+  .intro-kicker { color:rgba(152,208,249,.64);font-size:10px;font-weight:800;letter-spacing:.19em;text-transform:uppercase; }
+  .intro-card h1,.win-card h2 { margin:7px 0 9px;color:#f1f9ff;font-size:clamp(29px,8vw,38px);letter-spacing:.015em;line-height:1.04; }
+  .intro-copy,.win-copy { margin:0 auto;color:rgba(210,231,250,.68);font-size:14px;line-height:1.55;max-width:31ch; }
+  .intro-copy strong { color:rgba(239,250,255,.94); }
+  .start-actions,.win-actions { display:grid;gap:9px;margin-top:21px; }
+  button.game-primary,button.game-ghost { width:100%;min-height:46px;border-radius:14px;font-size:13px;font-weight:780;letter-spacing:.01em; }
+  button.game-primary { color:#f4fbff;background:linear-gradient(135deg,rgba(64,159,246,.78),rgba(74,94,232,.82));border-color:rgba(166,222,255,.45);box-shadow:0 9px 24px rgba(36,127,235,.23); }
+  button.game-ghost { color:rgba(222,242,255,.84);background:rgba(190,226,255,.07);border-color:rgba(184,222,255,.17); }
+  .intro-foot { margin:13px 0 0;color:rgba(177,211,240,.42);font-size:10px;line-height:1.45; }
+  .win-glyph { display:block;margin-bottom:2px;color:#c8efff;font-size:38px;line-height:1;text-shadow:0 0 24px rgba(120,211,255,.75); }
+  .win-card h2 { font-size:27px; }
+  .win-card { transform:translateY(4px); }
+  body.awaiting .hud,body.awaiting .panel,body.awaiting .note { opacity:0;pointer-events:none; }
+  body.awaiting .hud { transform:translateY(-8px); }
+  body.awaiting .panel { transform:translate(-50%,10px); }
+  .hud,.panel,.note { transition:opacity .24s ease,transform .24s ease; }
+  #mode-switch { display:none; }
+  .route-label { margin-top:7px;color:rgba(177,218,249,.48);font-size:10px;letter-spacing:.08em;text-transform:uppercase; }
+  @media (max-width:620px) { .intro-card,.win-card { width:min(372px,calc(100vw - 34px));padding:23px 19px 19px; } .intro-card h1 { font-size:31px; } .screen { padding:17px; } }
+
+
+  /* ===== «Поймай горизонт» — живая калибровка ===== */
+  .horizon-screen { z-index:9;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:max(26px,env(safe-area-inset-top)) 20px max(24px,env(safe-area-inset-bottom));pointer-events:none; }
+  .horizon-copy { width:min(340px,100%);text-align:center; }
+  .horizon-kicker { color:rgba(154,211,250,.62);font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase; }
+  .horizon-copy h2 { margin:8px 0 7px;color:#edf8ff;font-size:clamp(27px,7vw,35px);line-height:1.04;letter-spacing:.01em; }
+  .horizon-copy p { margin:0;color:rgba(207,230,249,.62);font-size:13px;line-height:1.46; }
+  .horizon-state { display:inline-flex;margin-top:13px;padding:6px 10px;border:1px solid rgba(170,218,255,.14);border-radius:999px;background:rgba(3,10,20,.34);color:rgba(200,231,255,.64);font-size:10px;letter-spacing:.035em; }
+  .horizon-state.caught { color:rgba(231,250,255,.94);border-color:rgba(145,219,255,.38);background:rgba(52,151,236,.16);box-shadow:0 0 22px rgba(86,191,255,.16); }
+  .horizon-back { pointer-events:auto;min-height:34px;padding:0 12px;border:1px solid rgba(182,221,255,.16);border-radius:999px;background:rgba(6,14,26,.38);color:rgba(192,222,249,.58);font-size:10px; }
+  body.awaiting .horizon-screen { pointer-events:none; }
+  body.horizon-active .horizon-screen { pointer-events:auto; }
+  body.horizon-active .hud,body.horizon-active .panel,body.horizon-active .note { opacity:0;pointer-events:none; }
+
+</style>
+</head>
+<body class="awaiting">
+<canvas id="field" aria-label="Второй маршрут по чёрному стеклу: обойди высокий остров и прокати шар в чашу"></canvas>
+<header class="hud" aria-hidden="true">
+  <p class="eyebrow">ЧЁРНОЕ СТЕКЛО · ВТОРОЙ МАРШРУТ</p>
+  <h1>Островный обход</h1>
+  <p class="route-label">обойди высокий остров</p>
+  <p class="hint" id="hint">Стрелки или WASD наклоняют поле.</p>
+  <div class="status" aria-live="polite"><i class="pulse"></i><span id="status">выбери способ управления</span></div>
+  <div id="mode-switch" class="switch" role="group" aria-label="Режим управления">
+    <span class="switch-label">режим</span>
+    <button id="mode-desktop" class="switch-choice" type="button" aria-pressed="true">Десктоп</button>
+    <button id="mode-phone" class="switch-choice" type="button" aria-pressed="false">Смартфон</button>
+  </div>
+  <div id="grip-switch" class="switch" role="group" aria-label="Выбор хвата" hidden>
+    <span class="switch-label">хват</span>
+    <button id="grip-left" class="switch-choice" type="button" aria-pressed="true">левша</button>
+    <button id="grip-right" class="switch-choice" type="button" aria-pressed="false">правша</button>
+  </div>
+</header>
+<div class="panel" aria-label="Управление маршрутом">
+  <button id="enable" class="primary" type="button" hidden>Включить движение</button>
+  <i id="sensor-divider" class="divider" aria-hidden="true" hidden></i>
+  <button id="calibrate" type="button" disabled hidden>Поймать горизонт</button>
+  <button id="reset" type="button">Сначала</button>
+  <button id="return-intro" type="button">Управление</button>
+</div>
+<p class="note" id="note">На компьютере наклоняй поле стрелками или WASD. На телефоне — самим телефоном.</p>
+<section class="screen" id="intro" aria-label="Начать второй маршрут">
+  <div class="intro-card">
+    <div class="orb-mark" aria-hidden="true"></div>
+    <div class="intro-kicker">второй игровой маршрут</div>
+    <h1>Чёрное стекло</h1>
+    <p class="intro-copy">Высокий остров делит стекло надвое. <strong>Обойди</strong> его по внешней низине и проведи свет к чаше.</p>
+    <div class="start-actions">
+      <button class="game-primary" id="start-phone" type="button">Играть наклоном телефона</button>
+      <button class="game-ghost" id="start-desktop" type="button">Играть на компьютере</button>
+    </div>
+    <p class="intro-foot">На телефоне мы попросим доступ к движению. Пальцем по полю рулить не нужно.</p>
+  </div>
+</section>
+<section class="screen horizon-screen hidden" id="horizon-screen" aria-live="polite" aria-label="Калибровка горизонта">
+  <div class="horizon-copy">
+    <div class="horizon-kicker">настройка стекла</div>
+    <h2>Поймай горизонт</h2>
+    <p>Положи шар в тихий центр.<br>Когда он задержится, стекло запомнит ровное положение.</p>
+    <div class="horizon-state" id="horizon-state">Ловим горизонт…</div>
+  </div>
+  <button class="horizon-back" id="horizon-back" type="button">← Выбрать управление</button>
+</section>
+<section class="screen hidden" id="finish" aria-live="polite" aria-label="Маршрут завершён">
+  <div class="win-card">
+    <span class="win-glyph">◌</span>
+    <h2>Чаша поймана</h2>
+    <p class="win-copy">Шар обошёл высокий остров и остановился в тихой лунке. Второй маршрут прочитан — можно почувствовать его ещё раз.</p>
+    <div class="win-actions">
+      <button class="game-primary" id="replay" type="button">Пройти ещё раз</button>
+      <button class="game-ghost" id="choose-control" type="button">Сменить управление</button>
+    </div>
+  </div>
+</section>
+<div class="warning" id="warning" hidden role="dialog" aria-live="assertive">
+  <strong id="warning-title">Нужен доступ к движению</strong>
+  <span id="warning-copy">Открой страницу в Safari или Chrome телефона и разреши доступ к датчикам движения.</span>
+  <button id="warning-close" class="primary" type="button">Понятно</button>
+</div>
+<script>
+(() => {
+  'use strict';
+  const canvas=document.getElementById('field');
+  const ctx=canvas.getContext('2d',{alpha:false});
+  const meshLayer=document.createElement('canvas');
+  const meshCtx=meshLayer.getContext('2d');
+  const hud=document.querySelector('.hud');
+  const hint=document.getElementById('hint');
+  const statusNode=document.getElementById('status');
+  const note=document.getElementById('note');
+  const modeDesktopButton=document.getElementById('mode-desktop');
+  const modePhoneButton=document.getElementById('mode-phone');
+  const gripSwitch=document.getElementById('grip-switch');
+  const gripLeftButton=document.getElementById('grip-left');
+  const gripRightButton=document.getElementById('grip-right');
+  const enableButton=document.getElementById('enable');
+  const calibrateButton=document.getElementById('calibrate');
+  const resetButton=document.getElementById('reset');
+  const sensorDivider=document.getElementById('sensor-divider');
+  const warning=document.getElementById('warning');
+  const warningTitle=document.getElementById('warning-title');
+  const warningCopy=document.getElementById('warning-copy');
+  const warningClose=document.getElementById('warning-close');
+  const intro=document.getElementById('intro');
+  const finish=document.getElementById('finish');
+  const startPhoneButton=document.getElementById('start-phone');
+  const startDesktopButton=document.getElementById('start-desktop');
+  const replayButton=document.getElementById('replay');
+  const chooseControlButton=document.getElementById('choose-control');
+  const returnIntroButton=document.getElementById('return-intro');
+  const horizonScreen=document.getElementById('horizon-screen');
+  const horizonState=document.getElementById('horizon-state');
+  const horizonBackButton=document.getElementById('horizon-back');
+  const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+  const mix=(a,b,t)=>a+(b-a)*t;
+  const magnitude=(x,y)=>Math.hypot(x,y);
+  const terrain={cols:82,rows:116,values:new Float32Array(82*116),grain:null};
+  const routePoints=[{u:.80,v:.80},{u:.62,v:.85},{u:.36,v:.82},{u:.19,v:.66},{u:.17,v:.45},{u:.29,v:.24},{u:.51,v:.15},{u:.70,v:.18},{u:.80,v:.25}];
+  const islandCenter={u:.52,v:.51};
+  const islandRidge=[{u:.735,v:.75},{u:.735,v:.35}];
+  const LEVEL_TWO_DRIVE=1.12;
+  const state={
+    dpr:1,width:0,height:0,board:{x:0,y:0,w:0,h:0,r:34},
+    mode:'desktop',keys:{left:false,right:false,up:false,down:false},playing:false,won:false,trail:[],
+    start:{u:.80,v:.80},goal:{u:.80,v:.25,r:.045},ball:{u:.80,v:.80,vu:0,vv:0,r:.043},
+    phone:{enabled:false,listeners:false,calibration:null,tilt:{targetX:0,targetY:0,x:0,y:0,impulseX:0,impulseY:0,lastSampleAt:0},spin:{pivot:'left',omega:0,lastAppliedAt:0,lastMotionRateAt:0,lastYaw:null,lastYawAt:0,filteredRate:0,announcedAt:0},portrait:{tried:false,locked:false},sensorSeen:false,sensorWatchTimer:0,horizon:{active:false,committing:false,raw:{x:0,y:0},latest:null,recent:[],stableFor:0,stableSamples:[],lastStableAt:0,lastFrameAt:0,commitTimer:0,ball:{x:.52,y:-.34,vx:0,vy:0}}}
+  };
+  function setStatus(t){statusNode.textContent=t;}
+  function showWarning(t,c){warningTitle.textContent=t;warningCopy.textContent=c;warning.hidden=false;}
+  function closeWarning(){warning.hidden=true;}
+  function roundedRect(c,x,y,w,h,r){const q=Math.min(r,w/2,h/2);c.beginPath();c.moveTo(x+q,y);c.arcTo(x+w,y,x+w,y+h,q);c.arcTo(x+w,y+h,x,y+h,q);c.arcTo(x,y+h,x,y,q);c.arcTo(x,y,x+q,y,q);c.closePath();}
+  function idx(x,y){return y*terrain.cols+x;}
+  function pointSegmentDistance(px,py,a,b){const vx=b.u-a.u,vy=b.v-a.v,wx=px-a.u,wy=py-a.v;const denom=vx*vx+vy*vy||.0001;const t=clamp((wx*vx+wy*vy)/denom,0,1);const dx=px-(a.u+vx*t),dy=py-(a.v+vy*t);return Math.hypot(dx,dy);}
+  function seedTerrain(){
+    for(let y=0;y<terrain.rows;y++)for(let x=0;x<terrain.cols;x++){
+      const u=x/(terrain.cols-1),v=y/(terrain.rows-1);let d=99;
+      for(let i=1;i<routePoints.length;i++)d=Math.min(d,pointSegmentDistance(u,v,routePoints[i-1],routePoints[i]));
+      const trough=-.136*Math.exp(-(d*d)/(.078*.078));
+      const bank=.040*Math.exp(-((d-.121)*(d-.121))/(.033*.033));
+      const ix=(u-islandCenter.u)/.205,iy=(v-islandCenter.v)/.265;
+      const island=.168*Math.exp(-(ix*ix+iy*iy));
+      const ridgeDistance=pointSegmentDistance(u,v,islandRidge[0],islandRidge[1]);
+      const rightSpine=.108*Math.exp(-(ridgeDistance*ridgeDistance)/(.052*.052));
+      const gd=Math.hypot(u-state.goal.u,v-state.goal.v);
+      const destination=-.108*Math.exp(-(gd*gd)/(.060*.060));
+      terrain.values[idx(x,y)]=trough+bank+island+rightSpine+destination;
+    }
+  }
+  function sample(u,v){const x=clamp(u,0,1)*(terrain.cols-1),y=clamp(v,0,1)*(terrain.rows-1),x0=Math.floor(x),y0=Math.floor(y),x1=Math.min(terrain.cols-1,x0+1),y1=Math.min(terrain.rows-1,y0+1),tx=x-x0,ty=y-y0;return mix(mix(terrain.values[idx(x0,y0)],terrain.values[idx(x1,y0)],tx),mix(terrain.values[idx(x0,y1)],terrain.values[idx(x1,y1)],tx),ty);}
+  function gradient(u,v){const ex=1/(terrain.cols-1)*1.45,ey=1/(terrain.rows-1)*1.45;return{x:(sample(u+ex,v)-sample(u-ex,v))/(ex*2),y:(sample(u,v+ey)-sample(u,v-ey))/(ey*2)};}
+  function buildGrain(){const c=document.createElement('canvas');c.width=156;c.height=218;const g=c.getContext('2d'),im=g.createImageData(c.width,c.height);for(let i=0;i<im.data.length;i+=4){const cold=104+Math.random()*66;im.data[i]=cold;im.data[i+1]=cold+7;im.data[i+2]=cold+22;im.data[i+3]=Math.random()*22;}g.putImageData(im,0,0);terrain.grain=c;}
+  function resize(){state.dpr=Math.min(devicePixelRatio||1,2);state.width=innerWidth;state.height=innerHeight;canvas.width=Math.floor(state.width*state.dpr);canvas.height=Math.floor(state.height*state.dpr);ctx.setTransform(state.dpr,0,0,state.dpr,0,0);const top=Math.min(Math.max(226,hud.getBoundingClientRect().bottom+28),state.height*.38),bottom=Math.min(108,state.height*.16),available=Math.max(290,state.height-top-bottom),maxW=Math.min(state.width*.79,620),h=Math.min(available,maxW*1.15),w=Math.min(maxW,h/1.15);state.board={x:(state.width-w)/2,y:top+(available-h)/2,w,h:w*1.15,r:Math.max(27,Math.min(40,w*.072))};buildGrain();rebuildMeshLayer();}
+  function boardPoint(u,v){const b=state.board;return{x:b.x+b.w*u,y:b.y+b.h*v};}
+  function terrainPoint(u,v){const b=state.board,g=gradient(u,v),h=sample(u,v),warpX=clamp(-g.x*.0055,-.026,.026),warpY=clamp(-g.y*.0055,-.026,.026);return{x:b.x+(u+warpX)*b.w,y:b.y+(v+warpY)*b.h-h*b.w*.036};}
+  function drawBackdrop(){const bg=ctx.createLinearGradient(0,0,state.width,state.height);bg.addColorStop(0,'#02060d');bg.addColorStop(.55,'#050b16');bg.addColorStop(1,'#080819');ctx.fillStyle=bg;ctx.fillRect(0,0,state.width,state.height);const glow=ctx.createRadialGradient(state.width*.5,state.height*.42,0,state.width*.5,state.height*.45,Math.max(state.width,state.height)*.68);glow.addColorStop(0,'rgba(54,113,181,.10)');glow.addColorStop(.53,'rgba(26,49,91,.028)');glow.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=glow;ctx.fillRect(0,0,state.width,state.height);}
+  function drawMesh(c){const cols=22,rows=30,steps=52;c.save();c.lineCap='round';for(let pass=0;pass<2;pass++){c.globalCompositeOperation=pass?'screen':'source-over';for(let vertical=0;vertical<2;vertical++){const lines=vertical?cols:rows;for(let l=0;l<=lines;l++){let last=null;for(let s=0;s<=steps;s++){const t=s/steps,u=vertical?l/lines:t,v=vertical?t:l/lines,p=terrainPoint(u,v);if(last){const mu=(u+last.u)/2,mv=(v+last.v)/2,h=sample(mu,mv),g=gradient(mu,mv),rise=clamp(h/.06,0,1),dip=clamp(-h/.18,0,1),slope=clamp(magnitude(g.x,g.y)*.08,0,1);const alpha=pass?(.008+rise*.21+slope*.025):(.046+rise*.145+dip*.022+slope*.02);c.strokeStyle=pass?`rgba(185,231,255,${alpha.toFixed(3)})`:`rgba(${Math.round(133+rise*60)},${Math.round(180+rise*49)},${Math.round(231+rise*22)},${alpha.toFixed(3)})`;c.lineWidth=pass?.55+rise*.35:.46+rise*.28;c.beginPath();c.moveTo(last.p.x,last.p.y);c.lineTo(p.x,p.y);c.stroke();}last={u,v,p};}}}}c.restore();}
+  function rebuildMeshLayer(){meshLayer.width=canvas.width;meshLayer.height=canvas.height;meshCtx.setTransform(state.dpr,0,0,state.dpr,0,0);meshCtx.clearRect(0,0,state.width,state.height);const b=state.board;meshCtx.save();roundedRect(meshCtx,b.x,b.y,b.w,b.h,b.r);meshCtx.clip();drawMesh(meshCtx);meshCtx.restore();}
+  function drawMarble(){const ball=state.ball,p=terrainPoint(ball.u,ball.v),r=Math.max(12,state.board.w*ball.r);ctx.save();ctx.filter='blur(4px)';const sh=ctx.createRadialGradient(p.x+r*.16,p.y+r*.72,0,p.x+r*.16,p.y+r*.72,r*1.45);sh.addColorStop(0,'rgba(0,0,0,.7)');sh.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=sh;ctx.beginPath();ctx.ellipse(p.x+r*.16,p.y+r*.7,r*1.35,r*.42,.05,0,Math.PI*2);ctx.fill();ctx.restore();ctx.save();ctx.globalCompositeOperation='screen';const halo=ctx.createRadialGradient(p.x,p.y,r*.16,p.x,p.y,r*2.8);halo.addColorStop(0,'rgba(191,239,255,.29)');halo.addColorStop(.38,'rgba(80,184,255,.14)');halo.addColorStop(1,'rgba(65,103,225,0)');ctx.fillStyle=halo;ctx.beginPath();ctx.arc(p.x,p.y,r*2.8,0,Math.PI*2);ctx.fill();ctx.restore();const marble=ctx.createRadialGradient(p.x-r*.33,p.y-r*.42,r*.06,p.x,p.y,r);marble.addColorStop(0,'rgba(249,254,255,.99)');marble.addColorStop(.16,'rgba(178,233,255,.98)');marble.addColorStop(.49,'rgba(52,136,220,.96)');marble.addColorStop(.78,'rgba(12,41,91,.99)');marble.addColorStop(1,'rgba(2,12,35,1)');ctx.save();ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fillStyle=marble;ctx.fill();ctx.strokeStyle='rgba(244,254,255,.95)';ctx.lineWidth=1.35;ctx.stroke();ctx.globalCompositeOperation='screen';ctx.strokeStyle='rgba(162,232,255,.78)';ctx.lineWidth=.9;ctx.beginPath();ctx.arc(p.x-r*.05,p.y-r*.04,r*.82,3.52,5.38);ctx.stroke();ctx.restore();}
+
+  function rawOrientationToHorizon(beta,gamma){const a=screenAngle();let x=gamma,y=beta;if(a===90){x=-beta;y=gamma;}else if(a===180){x=-gamma;y=-beta;}else if(a===270){x=beta;y=-gamma;}return{x:clamp(x,-38,38),y:clamp(y,-38,38)};}
+  function drawHorizonBall(x,y,r){ctx.save();ctx.filter='blur(10px)';const shadow=ctx.createRadialGradient(x+r*.17,y+r*.76,0,x+r*.17,y+r*.76,r*1.42);shadow.addColorStop(0,'rgba(0,0,0,.82)');shadow.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=shadow;ctx.beginPath();ctx.ellipse(x+r*.17,y+r*.70,r*1.26,r*.38,.02,0,Math.PI*2);ctx.fill();ctx.restore();ctx.save();ctx.globalCompositeOperation='screen';const halo=ctx.createRadialGradient(x,y,r*.10,x,y,r*2.5);halo.addColorStop(0,'rgba(223,250,255,.44)');halo.addColorStop(.35,'rgba(88,184,255,.21)');halo.addColorStop(1,'rgba(54,103,240,0)');ctx.fillStyle=halo;ctx.beginPath();ctx.arc(x,y,r*2.5,0,Math.PI*2);ctx.fill();ctx.restore();const sphere=ctx.createRadialGradient(x-r*.33,y-r*.42,r*.05,x,y,r*1.05);sphere.addColorStop(0,'#fff');sphere.addColorStop(.10,'rgba(205,241,255,.98)');sphere.addColorStop(.40,'rgba(66,149,229,.95)');sphere.addColorStop(.76,'rgba(9,37,89,.98)');sphere.addColorStop(1,'rgba(0,7,27,1)');ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=sphere;ctx.fill();ctx.strokeStyle='rgba(235,251,255,.9)';ctx.lineWidth=1.2;ctx.stroke();ctx.save();ctx.globalCompositeOperation='screen';ctx.strokeStyle='rgba(214,248,255,.94)';ctx.lineWidth=Math.max(1.25,r*.075);ctx.lineCap='round';ctx.beginPath();ctx.arc(x,y,r*.85,3.48,5.38);ctx.stroke();ctx.restore();}
+  function renderHorizon(){drawBackdrop();const h=state.phone.horizon,cx=state.width*.5,cy=state.height*.60,rr=Math.min(state.width*.46,state.height*.255),rx=rr,ry=rr*.82;ctx.save();const outer=ctx.createRadialGradient(cx,cy,rr*.08,cx,cy,rr*1.38);outer.addColorStop(0,'rgba(6,16,34,.96)');outer.addColorStop(.50,'rgba(5,15,31,.92)');outer.addColorStop(.76,'rgba(10,26,48,.48)');outer.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=outer;ctx.beginPath();ctx.ellipse(cx,cy,rr*1.38,rr*1.12,0,0,Math.PI*2);ctx.fill();ctx.restore();ctx.save();ctx.globalCompositeOperation='screen';for(let i=6;i>=1;i--){const q=i/6;ctx.strokeStyle=`rgba(135,205,255,${(.025+(1-q)*.075).toFixed(3)})`;ctx.lineWidth=.7;ctx.beginPath();ctx.ellipse(cx,cy,rx*q,ry*q,0,0,Math.PI*2);ctx.stroke();}for(let a=0;a<12;a++){const ang=a*Math.PI*2/12;ctx.strokeStyle='rgba(160,219,255,.045)';ctx.lineWidth=.55;ctx.beginPath();ctx.moveTo(cx+Math.cos(ang)*rx,cy+Math.sin(ang)*ry);ctx.lineTo(cx+Math.cos(ang)*rx*.14,cy+Math.sin(ang)*ry*.14);ctx.stroke();}ctx.restore();ctx.save();const centre=ctx.createRadialGradient(cx,cy,0,cx,cy,rr*.34);centre.addColorStop(0,'rgba(217,248,255,.23)');centre.addColorStop(.25,'rgba(87,180,249,.10)');centre.addColorStop(1,'rgba(20,65,136,0)');ctx.fillStyle=centre;ctx.beginPath();ctx.arc(cx,cy,rr*.34,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(cx,cy,rr*.105,0,Math.PI*2);ctx.strokeStyle='rgba(201,243,255,.54)';ctx.lineWidth=1;ctx.stroke();ctx.restore();const bx=cx+h.ball.x*rr*.84,by=cy+h.ball.y*ry*.84;drawHorizonBall(bx,by,Math.max(15,state.width*.055));}
+  function updateHorizon(dt){const h=state.phone.horizon;if(!h.active||h.committing)return;const raw=h.raw,b=h.ball,targetX=clamp(raw.x/22,-1,1),targetY=clamp(raw.y/22,-1,1);b.vx+=(-b.x*6.0+targetX*2.55)*dt;b.vy+=(-b.y*6.0+targetY*2.55)*dt;const damping=Math.exp(-4.35*dt);b.vx*=damping;b.vy*=damping;b.x+=b.vx*dt;b.y+=b.vy*dt;if(Math.abs(b.x)>.82){b.x=clamp(b.x,-.82,.82);b.vx*=-.26;}if(Math.abs(b.y)>.82){b.y=clamp(b.y,-.82,.82);b.vy*=-.26;}const distance=Math.hypot(b.x,b.y),speed=Math.hypot(b.vx,b.vy),rawLength=Math.hypot(raw.x,raw.y),fresh=performance.now()-(h.latest?.at||0)<220;const calm=fresh&&distance<.065&&speed<.060&&rawLength<4.2;if(calm){h.stableFor+=dt;if(h.latest&&h.latest.at!==h.lastStableAt){h.stableSamples.push(h.latest);h.lastStableAt=h.latest.at;if(h.stableSamples.length>36)h.stableSamples.shift();}}else{h.stableFor=0;h.stableSamples=[];h.lastStableAt=0;}if(h.stableFor>=.82){commitHorizon();}}
+
+  function drawIslandRelief(){const b=state.board,p=terrainPoint(islandCenter.u,islandCenter.v),rx=b.w*.205,ry=b.h*.245;ctx.save();const shade=ctx.createRadialGradient(p.x-rx*.22,p.y-ry*.25,0,p.x,p.y,Math.max(rx,ry)*1.1);shade.addColorStop(0,'rgba(102,169,232,.16)');shade.addColorStop(.38,'rgba(28,78,137,.085)');shade.addColorStop(1,'rgba(3,12,27,0)');ctx.fillStyle=shade;ctx.beginPath();ctx.ellipse(p.x,p.y,rx*1.12,ry*1.12,0,0,Math.PI*2);ctx.fill();ctx.globalCompositeOperation='screen';for(let i=4;i>=1;i--){const q=i/4;ctx.strokeStyle=`rgba(151,214,255,${(.022+(1-q)*.080).toFixed(3)})`;ctx.lineWidth=.55+q*.12;ctx.beginPath();ctx.ellipse(p.x,p.y,rx*q,ry*q,0,0,Math.PI*2);ctx.stroke();}ctx.strokeStyle='rgba(207,239,255,.14)';ctx.lineWidth=.8;ctx.beginPath();ctx.ellipse(p.x,p.y,rx*1.04,ry*1.04,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
+  function drawGoal(){const p=terrainPoint(state.goal.u,state.goal.v),r=Math.max(11,state.board.w*state.goal.r);ctx.save();ctx.globalCompositeOperation='screen';const halo=ctx.createRadialGradient(p.x,p.y,r*.16,p.x,p.y,r*4.2);halo.addColorStop(0,'rgba(223,249,255,.40)');halo.addColorStop(.22,'rgba(119,205,255,.18)');halo.addColorStop(1,'rgba(69,121,255,0)');ctx.fillStyle=halo;ctx.beginPath();ctx.arc(p.x,p.y,r*4.2,0,Math.PI*2);ctx.fill();ctx.restore();ctx.save();ctx.shadowColor='rgba(0,0,0,.92)';ctx.shadowBlur=r*.95;ctx.beginPath();ctx.arc(p.x,p.y,r*1.12,0,Math.PI*2);ctx.fillStyle='rgba(0,3,9,.93)';ctx.fill();ctx.restore();const rim=ctx.createRadialGradient(p.x-r*.20,p.y-r*.24,r*.07,p.x,p.y,r*1.18);rim.addColorStop(0,'rgba(247,254,255,.98)');rim.addColorStop(.20,'rgba(155,222,255,.86)');rim.addColorStop(.52,'rgba(39,100,159,.58)');rim.addColorStop(.78,'rgba(6,18,39,.92)');rim.addColorStop(1,'rgba(0,2,8,1)');ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fillStyle=rim;ctx.fill();ctx.beginPath();ctx.arc(p.x,p.y,r*.48,0,Math.PI*2);ctx.fillStyle='#00030a';ctx.fill();}
+  function drawTrail(){if(state.trail.length<2)return;ctx.save();ctx.globalCompositeOperation='screen';ctx.lineCap='round';for(let i=1;i<state.trail.length;i++){const a=terrainPoint(state.trail[i-1].u,state.trail[i-1].v),b=terrainPoint(state.trail[i].u,state.trail[i].v);ctx.strokeStyle=`rgba(150,220,255,${(i/state.trail.length*.15).toFixed(3)})`;ctx.lineWidth=1.05;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}ctx.restore();}
+  function render(){if(state.phone.horizon.active){renderHorizon();return;}drawBackdrop();const b=state.board;ctx.save();ctx.shadowColor='rgba(0,0,0,.86)';ctx.shadowBlur=54;ctx.shadowOffsetY=22;roundedRect(ctx,b.x,b.y,b.w,b.h,b.r);ctx.fillStyle='#02060d';ctx.fill();ctx.restore();ctx.save();roundedRect(ctx,b.x,b.y,b.w,b.h,b.r);ctx.clip();const glass=ctx.createLinearGradient(b.x,b.y,b.x+b.w,b.y+b.h);glass.addColorStop(0,'#12233a');glass.addColorStop(.24,'#071222');glass.addColorStop(.55,'#02070f');glass.addColorStop(1,'#0c0b1d');ctx.fillStyle=glass;ctx.fillRect(b.x,b.y,b.w,b.h);const top=ctx.createRadialGradient(b.x+b.w*.25,b.y+b.h*.02,0,b.x+b.w*.28,b.y+b.h*.03,b.w*.88);top.addColorStop(0,'rgba(148,205,255,.18)');top.addColorStop(.4,'rgba(70,135,210,.045)');top.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=top;ctx.fillRect(b.x,b.y,b.w,b.h);ctx.globalAlpha=.13;ctx.globalCompositeOperation='screen';ctx.drawImage(terrain.grain,b.x,b.y,b.w,b.h);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.drawImage(meshLayer,0,0,state.width,state.height);drawIslandRelief();drawGoal();drawTrail();drawMarble();ctx.restore();ctx.save();roundedRect(ctx,b.x,b.y,b.w,b.h,b.r);ctx.strokeStyle='rgba(224,241,255,.21)';ctx.lineWidth=1;ctx.stroke();roundedRect(ctx,b.x+1.2,b.y+1.2,b.w-2.4,b.h-2.4,b.r-1.2);ctx.strokeStyle='rgba(255,255,255,.07)';ctx.lineWidth=.8;ctx.stroke();ctx.restore();}
+  function resetBall(){state.ball.u=state.start.u;state.ball.v=state.start.v;state.ball.vu=0;state.ball.vv=0;state.trail=[];state.won=false;setStatus(state.mode==='desktop'?'наклони поле стрелками или WASD':'шар ждёт наклона телефона');}
+  function beginRoute(mode){clearTimeout(state.phone.sensorWatchTimer);closeWarning();finish.classList.add('hidden');horizonScreen.classList.add('hidden');intro.classList.add('hidden');document.body.classList.remove('awaiting','horizon-active');hud.setAttribute('aria-hidden','false');state.playing=true;state.won=false;if(state.mode!==mode){setMode(mode);}else{resetBall();updateModeUI();resize();}if(mode==='desktop')setStatus('наклони поле стрелками или WASD');}
+  function resetMotionAroundHorizon(){const p=state.phone;p.tilt.targetX=p.tilt.targetY=p.tilt.x=p.tilt.y=0;p.tilt.impulseX=p.tilt.impulseY=0;p.tilt.lastSampleAt=0;p.spin.omega=0;p.spin.filteredRate=0;p.spin.lastAppliedAt=0;p.spin.lastMotionRateAt=0;p.spin.lastYaw=null;p.spin.lastYawAt=0;}
+  function startHorizonCapture(){const p=state.phone,h=p.horizon;if(!p.enabled)return;clearTimeout(h.commitTimer);clearPhoneMotion();h.active=true;h.committing=false;h.raw={x:0,y:0};h.latest=null;h.recent=[];h.stableFor=0;h.stableSamples=[];h.lastStableAt=0;h.ball={x:.52,y:-.34,vx:0,vy:0};state.playing=false;state.won=false;finish.classList.add('hidden');intro.classList.add('hidden');horizonScreen.classList.remove('hidden');horizonState.className='horizon-state';horizonState.textContent='Ловим горизонт…';document.body.classList.add('awaiting','horizon-active');hud.setAttribute('aria-hidden','true');watchHorizonSignal();}
+  function captureHorizonSample(e){const p=state.phone,h=p.horizon,raw=rawOrientationToHorizon(e.beta,e.gamma),sample={beta:e.beta,gamma:e.gamma,at:performance.now()};h.raw=raw;h.latest=sample;h.recent.push(sample);if(h.recent.length>48)h.recent.shift();watchHorizonSignal();p.sensorSeen=true;}
+  function commitHorizon(){const p=state.phone,h=p.horizon;if(h.committing)return;h.committing=true;const samples=(h.stableSamples.length?h.stableSamples:h.recent).slice(-24);const average=samples.reduce((sum,a)=>({beta:sum.beta+a.beta,gamma:sum.gamma+a.gamma}),{beta:0,gamma:0});p.calibration={beta:average.beta/Math.max(1,samples.length),gamma:average.gamma/Math.max(1,samples.length)};resetMotionAroundHorizon();horizonState.className='horizon-state caught';horizonState.textContent='Горизонт пойман';h.commitTimer=setTimeout(()=>{h.active=false;h.committing=false;horizonScreen.classList.add('hidden');document.body.classList.remove('awaiting','horizon-active');hud.setAttribute('aria-hidden','false');state.playing=true;resetBall();setStatus('Горизонт пойман — веди шар к чаше');},500);}
+  function watchHorizonSignal(){const p=state.phone,h=p.horizon;clearTimeout(p.sensorWatchTimer);p.sensorWatchTimer=setTimeout(()=>{const stale=!h.latest||performance.now()-h.latest.at>2500;if(p.enabled&&h.active&&stale){showWarning('Датчики пока молчат','Открой страницу напрямую в Safari или Chrome, а не во встроенном просмотре мессенджера.');horizonState.textContent='Ловим горизонт…';setStatus('не вижу сигнал датчиков');}},2800);}
+  async function startPhoneJourney(){if(state.mode!=='phone')setMode('phone');const ready=await enableSensors();if(!ready)return;startHorizonCapture();}
+  function showIntro(){const h=state.phone.horizon;clearTimeout(state.phone.sensorWatchTimer);clearTimeout(h.commitTimer);h.active=false;h.committing=false;state.playing=false;state.won=false;finish.classList.add('hidden');horizonScreen.classList.add('hidden');intro.classList.remove('hidden');document.body.classList.remove('horizon-active');document.body.classList.add('awaiting');hud.setAttribute('aria-hidden','true');}
+  function finishRoute(){if(state.won)return;state.won=true;state.playing=false;state.ball.vu=state.ball.vv=0;setStatus('чаша приняла шар');window.setTimeout(()=>finish.classList.remove('hidden'),420);}
+  function screenAngle(){const a=screen.orientation&&Number.isFinite(screen.orientation.angle)?screen.orientation.angle:(Number.isFinite(window.orientation)?window.orientation:0);return((a%360)+360)%360;}
+  function angleDifference(a,b){let d=a-b;while(d>180)d-=360;while(d<-180)d+=360;return d;}
+  function orientationToTilt(beta,gamma){const c=state.phone.calibration;if(!c)return{x:0,y:0};const pitch=angleDifference(beta,c.beta),roll=angleDifference(gamma,c.gamma),a=screenAngle();let x=roll,y=pitch;if(a===90){x=-pitch;y=roll;}else if(a===180){x=-roll;y=-pitch;}else if(a===270){x=pitch;y=-roll;}return{x:clamp(x,-38,38),y:clamp(y,-38,38)};}
+  function addTiltImpulse(t){const p=state.phone.tilt,now=performance.now();if(p.lastSampleAt){const dt=clamp((now-p.lastSampleAt)/1000,.008,.12),rx=(t.x-p.targetX)/dt,ry=(t.y-p.targetY)/dt,kick=r=>{const excess=Math.max(0,Math.abs(r)-52);return Math.sign(r)*Math.min(.90,excess/175);};p.impulseX=clamp(p.impulseX+kick(rx),-1.10,1.10);p.impulseY=clamp(p.impulseY+kick(ry),-1.10,1.10);}p.targetX=t.x;p.targetY=t.y;p.lastSampleAt=now;}
+  function slopeForce(deg){const usable=Math.max(0,Math.abs(deg)-1.1);if(!usable)return 0;const a=Math.min(usable,38),g=Math.sin(a*Math.PI/180),gain=1+.45*a/38;return Math.sign(deg)*g*gain*4;}
+  function spinPivot(){return state.phone.spin.pivot==='left'?{u:.095,v:.91}:{u:.905,v:.91};}
+  function applySpinRate(rate,now){if(!Number.isFinite(rate)||state.mode!=='phone')return;const s=state.phone.spin,dt=s.lastAppliedAt?clamp((now-s.lastAppliedAt)/1000,.008,.09):.016;s.lastAppliedAt=now;s.filteredRate=mix(s.filteredRate,rate,.46);const filtered=s.filteredRate,abs=Math.abs(filtered);if(abs<11)return;const target=Math.sign(filtered)*clamp(.42+(abs-11)/42*2.82,.42,3.25),follow=1-Math.exp(-dt*(7+Math.min(9,abs/9)));s.omega+=((target-s.omega)*follow);if(abs>110)s.omega=clamp(s.omega+Math.sign(filtered)*.18,-3.25,3.25);if(now-s.announcedAt>600){setStatus('физический поворот считан');s.announcedAt=now;}}
+  function trackYawSpin(e){if(!Number.isFinite(e.alpha))return;const now=performance.now(),s=state.phone.spin,prev=s.lastYaw,prevAt=s.lastYawAt;s.lastYaw=e.alpha;s.lastYawAt=now;if(!Number.isFinite(prev)||!prevAt||now-s.lastMotionRateAt<170)return;const dt=clamp((now-prevAt)/1000,.008,.12),rate=angleDifference(e.alpha,prev)/dt;if(Math.abs(rate)>3)applySpinRate(rate,now);}
+  function handleOrientation(e){if(!state.phone.enabled||state.mode!=='phone'||!Number.isFinite(e.beta)||!Number.isFinite(e.gamma))return;if(state.phone.horizon.active){captureHorizonSample(e);return;}if(!state.phone.calibration)return;addTiltImpulse(orientationToTilt(e.beta,e.gamma));trackYawSpin(e);state.phone.sensorSeen=true;}
+  function handleMotion(e){if(!state.phone.enabled||state.mode!=='phone')return;const rate=e.rotationRate&&e.rotationRate.alpha;if(!Number.isFinite(rate))return;const now=performance.now();if(Math.abs(rate)>1.5){state.phone.spin.lastMotionRateAt=now;applySpinRate(rate,now);}state.phone.sensorSeen=true;}
+  async function lockPortrait(){state.phone.portrait.tried=true;try{if(screen.orientation&&typeof screen.orientation.lock==='function'){await screen.orientation.lock('portrait-primary');state.phone.portrait.locked=true;return true;}}catch(_){}return false;}
+  function clearPhoneMotion(){const p=state.phone;p.calibration=null;p.tilt.targetX=p.tilt.targetY=p.tilt.x=p.tilt.y=0;p.tilt.impulseX=p.tilt.impulseY=0;p.tilt.lastSampleAt=0;p.spin.omega=0;p.spin.filteredRate=0;p.spin.lastAppliedAt=0;p.spin.lastMotionRateAt=0;p.spin.lastYaw=null;p.spin.lastYawAt=0;}
+  async function enableSensors(){closeWarning();const lockAttempt=lockPortrait();try{let mp='granted',op='granted';if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function')mp=await DeviceMotionEvent.requestPermission();if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function')op=await DeviceOrientationEvent.requestPermission();if(mp!=='granted'||op!=='granted'){showWarning('Движение не разрешено','Разреши доступ к движению в настройках браузера, затем открой страницу снова.');setStatus('датчики не разрешены');return false;}if(typeof DeviceMotionEvent==='undefined'&&typeof DeviceOrientationEvent==='undefined'){showWarning('На этом устройстве нет датчиков','Для этого теста нужен телефон с датчиками движения.');return false;}const locked=await lockAttempt;state.phone.enabled=true;state.phone.sensorSeen=false;clearPhoneMotion();updateModeUI();if(!state.phone.listeners){window.addEventListener('deviceorientation',handleOrientation,true);window.addEventListener('devicemotion',handleMotion,true);state.phone.listeners=true;}enableButton.textContent='Движение включено';enableButton.disabled=true;calibrateButton.disabled=false;setStatus(locked?'держи телефон спокойно — настраиваю стекло':'зафиксируй экран в портрете и держи его спокойно');return true;}catch(_){showWarning('Не удалось включить движение','Открой страницу напрямую в Safari или Chrome и попробуй ещё раз.');setStatus('датчики недоступны');return false;}}
+  function calibrate(){if(state.mode==='phone'&&state.phone.enabled)startHorizonCapture();}
+  function updateModeUI(){const phone=state.mode==='phone';modeDesktopButton.setAttribute('aria-pressed',String(!phone));modePhoneButton.setAttribute('aria-pressed',String(phone));gripSwitch.hidden=!phone;enableButton.hidden=!phone||state.phone.enabled;sensorDivider.hidden=!phone||state.phone.enabled;calibrateButton.hidden=!phone;if(phone){hint.textContent='Телефон — это поле. Обойди высокий остров по внешней низине: прямой подъём справа отзывается сильнее, а чашу ищи за верхним перевалом. Пальцем шар не управляется.';note.textContent='Во втором маршруте отклик наклона немного живее, но торможение осталось прежним. Палец нужен только для кнопок.';setStatus(state.phone.enabled?'шар ждёт движения телефона':'Смартфон — нажми «Включить движение»');}else{hint.textContent='Стрелки или WASD наклоняют поле. Широкая внешняя низина обходит высокий остров слева и выводит к чаше через верхний перевал.';note.textContent='Во втором маршруте отклик наклона немного живее, но инерция и торможение не усилены. Тач‑руления нет.';setStatus('десктоп — стрелки или WASD');}}
+  function setMode(mode){if(state.mode===mode)return;state.mode=mode;resetBall();updateModeUI();resize();}
+  function setGrip(side){state.phone.spin.pivot=side;state.phone.spin.omega=0;state.phone.spin.filteredRate=0;gripLeftButton.setAttribute('aria-pressed',String(side==='left'));gripRightButton.setAttribute('aria-pressed',String(side==='right'));setStatus(side==='left'?'выбран хват левши':'выбран хват правши');}
+  function updateBall(dt){if(!state.playing||state.won)return;const b=state.ball,terrainSlope=gradient(b.u,b.v),raw=Math.hypot(terrainSlope.x,terrainSlope.y),s=raw>.78?.78/raw:1,slope={x:terrainSlope.x*s,y:terrainSlope.y*s};let au=-slope.x*.72,av=-slope.y*.72;let maxSpeed=.56,drag=2.9;
+    if(state.mode==='desktop'){const x=(state.keys.right?1:0)-(state.keys.left?1:0),y=(state.keys.down?1:0)-(state.keys.up?1:0);au+=x*.82*LEVEL_TWO_DRIVE;av+=y*.82*LEVEL_TWO_DRIVE;}
+    else if(state.phone.enabled){const p=state.phone,t=p.tilt,smooth=1-Math.exp(-dt*15);t.x+=(t.targetX-t.x)*smooth;t.y+=(t.targetY-t.y)*smooth;t.impulseX*=Math.exp(-5*dt);t.impulseY*=Math.exp(-5*dt);p.spin.omega*=Math.exp(-1.14*dt);if(Math.abs(p.spin.omega)<.012)p.spin.omega=0;const driveX=slopeForce(t.x)*.40*LEVEL_TWO_DRIVE,driveY=slopeForce(t.y)*.40*LEVEL_TWO_DRIVE;au+=driveX+t.impulseX*.35;av+=driveY+t.impulseY*.35;const pivot=spinPivot(),rx=b.u-pivot.u,ry=b.v-pivot.v,r=Math.hypot(rx,ry);if(p.spin.omega&&r>.001){const outX=rx/r,outY=ry/r,tanX=-outY,tanY=outX,centrifugal=p.spin.omega*p.spin.omega*.13*Math.min(.85,.14+r*.95),swirl=p.spin.omega*.065*Math.min(1,.38+r*1.5);au+=outX*centrifugal+tanX*swirl;av+=outY*centrifugal+tanY*swirl;}const tiltStrength=Math.max(Math.abs(driveX),Math.abs(driveY)),impulseStrength=magnitude(t.impulseX,t.impulseY);maxSpeed=clamp(.42+tiltStrength*.25+impulseStrength*.18+Math.abs(p.spin.omega)*.10,.42,.88);drag=1.55;}
+    b.vu+=au*dt;b.vv+=av*dt;const speed=magnitude(b.vu,b.vv);if(speed>maxSpeed){b.vu=b.vu/speed*maxSpeed;b.vv=b.vv/speed*maxSpeed;}if(speed>.0001&&raw>.02){const hu=b.vu/(speed||1),hv=b.vv/(speed||1),uphill=Math.max(0,hu*slope.x+hv*slope.y),brake=Math.min(.25,uphill*.13);b.vu-=hu*brake*dt;b.vv-=hv*brake*dt;}const fade=Math.exp(-drag*dt);b.vu*=fade;b.vv*=fade;b.u+=b.vu*dt;b.v+=b.vv*dt;if(b.u<.035||b.u>.965){b.vu*=-.38;b.u=clamp(b.u,.035,.965);}if(b.v<.035||b.v>.965){b.vv*=-.38;b.v=clamp(b.v,.035,.965);}state.trail.push({u:b.u,v:b.v});if(state.trail.length>42)state.trail.shift();const d=Math.hypot(b.u-state.goal.u,b.v-state.goal.v);if(d<state.goal.r*.78&&magnitude(b.vu,b.vv)<.28){finishRoute();}}
+  let last=performance.now();function frame(now){const dt=Math.min(.045,(now-last)/1000);last=now;updateHorizon(dt);updateBall(dt);render();requestAnimationFrame(frame);}
+  modeDesktopButton.addEventListener('click',()=>{beginRoute('desktop');});modePhoneButton.addEventListener('click',startPhoneJourney);gripLeftButton.addEventListener('click',()=>setGrip('left'));gripRightButton.addEventListener('click',()=>setGrip('right'));enableButton.addEventListener('click',startPhoneJourney);calibrateButton.addEventListener('click',calibrate);resetButton.addEventListener('click',()=>{finish.classList.add('hidden');state.playing=true;resetBall();});returnIntroButton.addEventListener('click',showIntro);startDesktopButton.addEventListener('click',()=>beginRoute('desktop'));startPhoneButton.addEventListener('click',startPhoneJourney);replayButton.addEventListener('click',()=>{finish.classList.add('hidden');state.playing=true;resetBall();});chooseControlButton.addEventListener('click',showIntro);horizonBackButton.addEventListener('click',showIntro);warningClose.addEventListener('click',closeWarning);window.addEventListener('resize',resize,{passive:true});window.addEventListener('keydown',e=>{const k=e.key.toLowerCase(),m={arrowleft:'left',a:'left',arrowright:'right',d:'right',arrowup:'up',w:'up',arrowdown:'down',s:'down'};if(state.playing&&state.mode==='desktop'&&m[k]){e.preventDefault();state.keys[m[k]]=true;}});window.addEventListener('keyup',e=>{const k=e.key.toLowerCase(),m={arrowleft:'left',a:'left',arrowright:'right',d:'right',arrowup:'up',w:'up',arrowdown:'down',s:'down'};if(m[k])state.keys[m[k]]=false;});document.addEventListener('visibilitychange',()=>{last=performance.now();});seedTerrain();resize();updateModeUI();requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
